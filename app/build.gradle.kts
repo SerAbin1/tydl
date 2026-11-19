@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.tydl"
+    namespace = "io.github.serabin1.tydl"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.tydl"
+        applicationId = "io.github.serabin1.tydl"
         minSdk = 29
         targetSdk = 37
         versionCode = 1

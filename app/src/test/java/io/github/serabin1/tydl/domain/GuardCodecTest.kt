@@ -1,0 +1,46 @@
+package io.github.serabin1.tydl.domain
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class GuardCodecTest {
+
+    private val t0 = 1_000_000L
+    private val minute = 60_000L
+
+    @Test
+    fun `empty state round-trips`() {
+        val restored = GuardCodec.decode(GuardCodec.encode(GuardState()))
+
+        assertEquals(GuardState(), restored)
+    }
+
+    @Test
+    fun `a full state round-trips`() {
+        val state = GuardState(
+            session = Session.start("check the build", 5, t0).extend(t0 + minute),
+            pausedUntil = t0 + 30 * minute,
+            expiryShownAt = t0 + 12 * minute,
+        )
+
+        assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
+    }
+
+    @Test
+    fun `reasons with separators, newlines and unicode survive`() {
+        val reason = "a|b\nc — café 🚀 100%"
+        val state = GuardState(session = Session.start(reason, 5, t0))
+
+        val restored = GuardCodec.decode(GuardCodec.encode(state))
+
+        assertEquals(reason, restored.session!!.reason)
+    }
+
+    @Test
+    fun `garbage decodes to an empty state`() {
+        assertEquals(GuardState(), GuardCodec.decode("nonsense"))
+        assertEquals(GuardState(), GuardCodec.decode(""))
+        assertNull(GuardCodec.decode(null).session)
+    }
+}
