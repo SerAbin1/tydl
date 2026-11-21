@@ -41,9 +41,10 @@ android {
             // Locally, without the release key, sign with the debug key so the
             // optimised build is still installable on a connected phone.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // Full R8 with AGP 9's default keep rules. packageScope is
+            // experimental and broke Kotlin stdlib reflection in v0.1.0.
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }
