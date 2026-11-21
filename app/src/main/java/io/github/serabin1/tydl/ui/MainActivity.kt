@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var notificationsGranted by mutableStateOf(false)
     private var deviceAdminGranted by mutableStateOf(false)
     private var batteryExempt by mutableStateOf(false)
+    private var fallback by mutableStateOf<String?>(null)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
@@ -77,36 +78,90 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         GuardService.start(this)
+        fallback = fallbackFrom(intent)
         setContent {
             TydlTheme {
-                MainScreen(
-                    state = guardState,
-                    lastUnlockAt = lastUnlockAt,
-                    overlayGranted = overlayGranted,
-                    notificationsGranted = notificationsGranted,
-                    deviceAdminGranted = deviceAdminGranted,
-                    batteryExempt = batteryExempt,
-                    onPause = { minutes ->
-                        GuardService.pause(this, minutes)
-                        refresh()
-                    },
-                    onResume = {
-                        GuardService.resume(this)
-                        refresh()
-                    },
-                    onAllowOverlay = ::openOverlaySettings,
-                    onAllowNotifications = {
-                        if (Build.VERSION.SDK_INT >= 33) {
-                            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                when (fallback) {
+                    GuardService.EXTRA_SHOW_PROMPT -> PromptScreen(
+                        onStart = { reason, minutes ->
+                            GuardService.startSession(this, reason, minutes)
+                            fallback = null
+                            refresh()
+                        },
+                    )
+
+                    GuardService.EXTRA_SHOW_EXPIRY -> {
+                        val session = guardState.session
+                        if (session != null) {
+                            ExpiryScreen(
+                                session = session,
+                                now = System.currentTimeMillis(),
+                                onDone = {
+                                    GuardService.end(this)
+                                    LockAdminReceiver.lockScreen(this)
+                                    fallback = null
+                                    refresh()
+                                },
+                                onExtend = {
+                                    GuardService.extend(this)
+                                    fallback = null
+                                    refresh()
+                                },
+                            )
+                        } else {
+                            fallback = null
+                            MainContent()
                         }
-                    },
-                    onAllowDeviceAdmin = ::openDeviceAdminSettings,
-                    onAllowBattery = ::requestBatteryExemption,
-                    onOpenAppSettings = ::openAppSettings,
-                    onTestUnlock = { GuardService.simulateUnlock(this) },
-                )
+                    }
+
+                    else -> MainContent()
+                }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        fallbackFrom(intent)?.let { fallback = it }
+    }
+
+    private fun fallbackFrom(intent: Intent?): String? = when {
+        intent?.getBooleanExtra(GuardService.EXTRA_SHOW_PROMPT, false) == true ->
+            GuardService.EXTRA_SHOW_PROMPT
+        intent?.getBooleanExtra(GuardService.EXTRA_SHOW_EXPIRY, false) == true ->
+            GuardService.EXTRA_SHOW_EXPIRY
+        else -> null
+    }
+
+    @Composable
+    private fun MainContent() {
+        MainScreen(
+            state = guardState,
+            lastUnlockAt = lastUnlockAt,
+            overlayGranted = overlayGranted,
+            notificationsGranted = notificationsGranted,
+            deviceAdminGranted = deviceAdminGranted,
+            batteryExempt = batteryExempt,
+            onPause = { minutes ->
+                GuardService.pause(this, minutes)
+                refresh()
+            },
+            onResume = {
+                GuardService.resume(this)
+                refresh()
+            },
+            onAllowOverlay = ::openOverlaySettings,
+            onAllowNotifications = {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
+            onAllowDeviceAdmin = ::openDeviceAdminSettings,
+            onAllowBattery = ::requestBatteryExemption,
+            onOpenAppSettings = ::openAppSettings,
+            onTestUnlock = { GuardService.simulateUnlock(this) },
+        )
     }
 
     override fun onResume() {

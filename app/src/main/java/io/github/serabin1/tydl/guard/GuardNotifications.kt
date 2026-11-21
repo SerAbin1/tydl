@@ -77,12 +77,14 @@ object GuardNotifications {
         title: String,
         text: String,
         target: Class<*>,
+        extra: String? = null,
     ): Notification {
         val intent = Intent(context, target)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (extra != null) intent.putExtra(extra, true)
         val pending = PendingIntent.getActivity(
             context,
-            target.hashCode(),
+            (target.hashCode() * 31) + (extra?.hashCode() ?: 0),
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
