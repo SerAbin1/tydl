@@ -10,7 +10,7 @@ help:
 	@echo "make install  build and install the debug APK on the connected phone"
 	@echo "make run      install and launch Tydl"
 	@echo "make logs     follow only Tydl's log output"
-	@echo "make release  build the release APK (unsigned until a keystore is set up)"
+	@echo "make release  build the release APK (debug-signed locally; CI uses the release key)"
 	@echo "make clean    delete build outputs"
 
 test:
@@ -31,7 +31,7 @@ logs:
 
 release:
 	$(GRADLE) :app:assembleRelease
-	@echo "APK: app/build/outputs/apk/release/app-release-unsigned.apk (not installable until signed)"
+	@echo "APK: app/build/outputs/apk/release/app-release.apk (debug-signed locally)"
 
 clean:
 	$(GRADLE) clean

@@ -8,3 +8,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Release signing material (kept outside the repo in ~/.secrets/tydl)
+*.jks
+*.p12
+*.b64

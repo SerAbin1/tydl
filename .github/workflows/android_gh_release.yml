@@ -1,0 +1,111 @@
+name: Android GitHub release
+
+# Push a v* tag to publish that exact version. Tests run on push to main via
+# android_ci.yml; this workflow only makes releases.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.1.0 (creates/targets no tag)"
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # One release at a time, so version codes are published in order.
+    concurrency: android-release
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve version
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            version="${REF_NAME#v}"
+          else
+            version="$INPUT_VERSION"
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version must be major.minor.patch, got: $version"
+            exit 1
+          fi
+          IFS='.' read -r major minor patch <<< "$version"
+          # 10# avoids bash interpreting a leading zero as octal.
+          # e.g. 0.1.0 -> 100, 1.2.3 -> 10203.
+          code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+          if [ "$code" -le 0 ]; then
+            echo "::error::versionCode must be positive, got: $code"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          # Stay on the fully open-source path (MIT, wraps actions/cache)
+          # instead of the proprietary gradle-actions-caching component.
+          cache-provider: basic
+
+      # Without the key Gradle would quietly fall back to the debug key, and an
+      # APK signed with it can't update the installed app.
+      - name: Restore the release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          missing=()
+          [ -n "$KEYSTORE_BASE64" ] || missing+=(ANDROID_KEYSTORE_BASE64)
+          [ -n "$STORE_PASSWORD" ] || missing+=(ANDROID_KEYSTORE_PASSWORD)
+          [ -n "$KEY_ALIAS" ] || missing+=(ANDROID_KEY_ALIAS)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing secrets: ${missing[*]} (refusing to publish a debug-signed APK)."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease \
+            -PversionName="$VERSION" -PversionCode="$VERSION_CODE"
+          mv app/build/outputs/apk/release/app-release.apk "tydl-$VERSION.apk"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" "tydl-$VERSION.apk" \
+            --target "$GITHUB_SHA" \
+            --title "Tydl $VERSION" \
+            --notes "Built from $GITHUB_SHA: $(git log -1 --format=%s "$GITHUB_SHA")"
+
+  # Republishes the F-Droid repo so the new release shows up there too.
+  fdroid:
+    needs: release
+    uses: ./.github/workflows/fdroid_release.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    secrets: inherit

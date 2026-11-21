@@ -1,0 +1,98 @@
+name: F-Droid release
+
+# Rebuilds the self-hosted F-Droid repo on GitHub Pages from the newest GitHub
+# releases' APKs. Stateless: every run starts from scratch, and only the index
+# signing key carries over — its fingerprint is the repo's identity, so losing
+# it means everyone re-adds the repo. Called by android_gh_release.yml after a
+# release; runnable by hand to republish without one.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+# One deploy at a time; a newer run supersedes a queued one.
+concurrency: fdroid-pages
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}repo
+    env:
+      FDROID_KEY_ALIAS: ${{ secrets.FDROID_KEY_ALIAS }}
+      FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - run: pip install fdroidserver==2.4.5
+
+      # Built outside the checkout so nothing but repo/ can end up published —
+      # the keystore sits next to it.
+      - name: Assemble the repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
+        run: |
+          missing=()
+          [ -n "$KEYSTORE_BASE64" ] || missing+=(FDROID_KEYSTORE_BASE64)
+          [ -n "$FDROID_KEYSTORE_PASSWORD" ] || missing+=(FDROID_KEYSTORE_PASSWORD)
+          [ -n "$FDROID_KEY_ALIAS" ] || missing+=(FDROID_KEY_ALIAS)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing secrets: ${missing[*]} (a new key would change the repo's fingerprint)."
+            exit 1
+          fi
+          work="$RUNNER_TEMP/fdroid"
+          cp -r fdroid "$work"
+          umask 077
+          chmod 600 "$work/config.yml"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$work/keystore.p12"
+          mkdir "$work/repo"
+          # The latest three, so a bad release can still be rolled back from
+          # the F-Droid client.
+          gh release list --limit 3 --exclude-drafts --json tagName,publishedAt \
+            --jq '.[] | select(.tagName | startswith("v")) | "\(.tagName)\t\(.publishedAt)"' |
+            while IFS=$'\t' read -r tag published; do
+              stage="$work/staging"
+              rm -rf "$stage"
+              mkdir "$stage"
+              gh release download "$tag" --pattern '*.apk' --dir "$stage"
+              # Stamp each APK with its release's publication date;
+              # --use-date-from-apk below reads that as the version's "added"
+              # date, so a repo rebuild keeps the original dates instead of
+              # marking every version as new.
+              for apk in "$stage"/*.apk; do
+                [ -e "$apk" ] || continue
+                touch -d "$published" "$apk"
+                mv "$apk" "$work/repo/"
+              done
+            done
+          echo "FDROID_WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Build the index
+        working-directory: ${{ env.FDROID_WORK }}
+        run: fdroid update --use-date-from-apk --pretty
+
+      - name: Print the repo link
+        working-directory: ${{ env.FDROID_WORK }}
+        run: |
+          fingerprint=$(keytool -exportcert -storetype PKCS12 \
+            -keystore keystore.p12 -alias "$FDROID_KEY_ALIAS" \
+            -storepass "$FDROID_KEYSTORE_PASSWORD" | sha256sum | cut -d' ' -f1 | tr a-f A-F)
+          echo "Add in F-Droid: https://serabin1.github.io/tydl/repo?fingerprint=$fingerprint" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$RUNNER_TEMP/site"
+          mv repo "$RUNNER_TEMP/site/repo"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

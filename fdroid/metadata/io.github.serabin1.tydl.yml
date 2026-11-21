@@ -1,0 +1,16 @@
+Categories:
+  - Time Management
+License: MIT
+AuthorName: Abin Biju
+SourceCode: https://github.com/SerAbin1/tydl
+IssueTracker: https://github.com/SerAbin1/tydl/issues
+Changelog: https://github.com/SerAbin1/tydl/releases
+
+Name: Tydl
+Summary: A reason-and-timer guard for phone unlocks
+Description: |-
+  Tydl asks you to state a reason and a time limit when you unlock your phone.
+  When time runs up, an expiry screen reminds you what you were there for.
+
+  It runs as a foreground service with a persistent notification, reacts to
+  unlocks, and can pause or resume the guard from the main screen.
