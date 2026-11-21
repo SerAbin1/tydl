@@ -11,16 +11,31 @@ import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
-import io.github.serabin1.tydl.ui.ExpiryActivity
-import io.github.serabin1.tydl.ui.PromptActivity
+import io.github.serabin1.tydl.ui.ExpiryScreen
+import io.github.serabin1.tydl.ui.MainActivity
+import io.github.serabin1.tydl.ui.PromptScreen
+import io.github.serabin1.tydl.ui.theme.TydlTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,11 +49,7 @@ import kotlinx.coroutines.launch
  *
  * It runs as a foreground service so it survives app switches and process eviction, keeps a
  * persistent status notification, and reacts to unlocks. All policy lives in [GuardEngine];
- * this class is the imperative shell: broadcasts in, activities out.
- *
- * Since Android 14, a background activity launch needs more than the overlay permission: the
- * app must have a currently visible non-activity window, or the launch is silently blocked
- * ([launch] bridges this with a 1x1 transparent overlay before starting the activity).
+ * this class is the imperative shell: broadcasts in, overlays out.
  */
 class GuardService : Service() {
 
@@ -49,8 +60,8 @@ class GuardService : Service() {
 
     /** Debounces SCREEN_ON + USER_PRESENT arriving for the same unlock. */
     private var lastUnlockAt = 0L
-    private var bridgeView: View? = null
-    private var lastUiShownAt = 0L
+    private var promptOverlay: OverlayWindow? = null
+    private var expiryOverlay: OverlayWindow? = null
 
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -128,11 +139,6 @@ class GuardService : Service() {
                 Log.i(TAG, "manual unlock requested")
                 onUnlock()
             }
-
-            ACTION_SHOWN -> {
-                lastUiShownAt = now()
-                Log.i(TAG, "ui shown handshake received")
-            }
         }
         return START_STICKY
     }
@@ -142,7 +148,8 @@ class GuardService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "service destroyed")
         scope.cancel()
-        removeOverlayBridge()
+        hidePrompt()
+        hideExpiry()
         try {
             unregisterReceiver(unlockReceiver)
         } catch (e: IllegalArgumentException) {
@@ -179,6 +186,9 @@ class GuardService : Service() {
             GuardEffect.ShowExpiry -> showExpiry()
             GuardEffect.None -> Unit
         }
+        val now = now()
+        if (state.session != null) hidePrompt()
+        if (state.session?.isOverrun(now) != true) hideExpiry()
     }
 
     private fun showPrompt() = whenUnlocked("prompt") {
@@ -187,14 +197,20 @@ class GuardService : Service() {
             notifyAlert(
                 title = "State your reason",
                 text = "Tap to tell Tydl why you unlocked.",
-                target = PromptActivity::class.java,
+                extra = EXTRA_SHOW_PROMPT,
             )
         } else {
-            launch(
-                target = PromptActivity::class.java,
-                launchedAt = now(),
-                fallbackText = "State your reason — tap to continue.",
-            )
+            hidePrompt()
+            promptOverlay = showOverlay { overlay ->
+                TydlTheme {
+                    PromptScreen(onStart = { reason ->
+                        startSession(this@GuardService, reason)
+                        overlay.remove()
+                        promptOverlay = null
+                    })
+                }
+            }
+            Log.i(TAG, "prompt overlay shown")
         }
     }
 
@@ -205,14 +221,29 @@ class GuardService : Service() {
             notifyAlert(
                 title = "Time's up",
                 text = "\"${session.reason}\" is past its minutes.",
-                target = ExpiryActivity::class.java,
+                extra = EXTRA_SHOW_EXPIRY,
             )
         } else {
-            launch(
-                target = ExpiryActivity::class.java,
-                launchedAt = now(),
-                fallbackText = "\u201C${session.reason}\u201D is past its minutes — tap to finish.",
-            )
+            hideExpiry()
+            expiryOverlay = showOverlay { overlay ->
+                TydlTheme {
+                    ExpiryScreen(
+                        session = session,
+                        now = now(),
+                        onDone = {
+                            end(this@GuardService)
+                            overlay.remove()
+                            expiryOverlay = null
+                        },
+                        onExtend = {
+                            extend(this@GuardService)
+                            overlay.remove()
+                            expiryOverlay = null
+                        },
+                    )
+                }
+            }
+            Log.i(TAG, "expiry overlay shown")
         }
     }
 
@@ -234,79 +265,22 @@ class GuardService : Service() {
         }
     }
 
-    private fun launch(target: Class<*>, launchedAt: Long, fallbackText: String) {
-        val intent = Intent(this, target).addFlags(
-            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
-        )
-        val windowManager = getSystemService(WindowManager::class.java)
-        val bridgeAdded = windowManager?.let { addOverlayBridge(it) } == true
-
-        if (bridgeAdded) {
-            scope.launch {
-                delay(BRIDGE_LAUNCH_DELAY_MS)
-                doStartActivity(intent, target)
-                Log.i(TAG, "overlay bridge will be removed soon")
-                delay(BRIDGE_REMOVE_DELAY_MS)
-                removeOverlayBridge()
-            }
-        } else {
-            doStartActivity(intent, target)
-        }
-
-        scope.launch {
-            delay(HANDSHAKE_TIMEOUT_MS)
-            if (lastUiShownAt < launchedAt) {
-                Log.w(TAG, "$target was not shown within $HANDSHAKE_TIMEOUT_MS ms; posting a notification")
-                notifyAlert("Tydl", fallbackText, target)
-            }
-        }
+    private fun showOverlay(content: @androidx.compose.runtime.Composable (OverlayWindow) -> Unit): OverlayWindow {
+        val wm = getSystemService(WindowManager::class.java)
+        val overlay = OverlayWindow(this, wm)
+        overlay.setContent(content)
+        overlay.show()
+        return overlay
     }
 
-    private fun doStartActivity(intent: Intent, target: Class<*>) {
-        try {
-            Log.i(TAG, "startActivity $target")
-            startActivity(intent)
-            Log.i(TAG, "startActivity returned for $target")
-        } catch (e: Exception) {
-            Log.w(TAG, "Background launch of $target refused", e)
-            notifyAlert("Tydl needs you", "Tap to continue.", target)
-        }
+    private fun hidePrompt() {
+        promptOverlay?.remove()
+        promptOverlay = null
     }
 
-    private fun addOverlayBridge(windowManager: WindowManager): Boolean {
-        val view = View(this)
-        val params = WindowManager.LayoutParams(
-            1,
-            1,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSPARENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-        }
-        return try {
-            windowManager.addView(view, params)
-            bridgeView = view
-            Log.i(TAG, "overlay bridge added")
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not add the overlay bridge", e)
-            false
-        }
-    }
-
-    private fun removeOverlayBridge() {
-        bridgeView?.let {
-            try {
-                getSystemService(WindowManager::class.java)?.removeView(it)
-                Log.i(TAG, "overlay bridge removed")
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not remove the overlay bridge", e)
-            }
-        }
-        bridgeView = null
+    private fun hideExpiry() {
+        expiryOverlay?.remove()
+        expiryOverlay = null
     }
 
     private fun notifyGuard() {
@@ -314,12 +288,74 @@ class GuardService : Service() {
             .notify(GuardNotifications.ID_GUARD, GuardNotifications.guard(this, state))
     }
 
-    private fun notifyAlert(title: String, text: String, target: Class<*>) {
+    private fun notifyAlert(title: String, text: String, extra: String) {
         getSystemService(android.app.NotificationManager::class.java)
-            .notify(GuardNotifications.ID_ALERT, GuardNotifications.alert(this, title, text, target))
+            .notify(
+                GuardNotifications.ID_ALERT,
+                GuardNotifications.alert(this, title, text, MainActivity::class.java, extra),
+            )
     }
 
     private fun now(): Long = System.currentTimeMillis()
+
+    private class OverlayWindow(
+        private val context: Context,
+        private val wm: WindowManager,
+    ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+
+        private val lifecycleRegistry = LifecycleRegistry(this)
+        private val store = ViewModelStore()
+        private val savedStateController = SavedStateRegistryController.create(this)
+        private val view = ComposeView(context)
+
+        override val lifecycle: Lifecycle get() = lifecycleRegistry
+        override val viewModelStore: ViewModelStore get() = store
+        override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
+
+        init {
+            savedStateController.performRestore(null)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+            view.setViewTreeLifecycleOwner(this)
+            view.setViewTreeViewModelStoreOwner(this)
+            view.setViewTreeSavedStateRegistryOwner(this)
+            view.setOnKeyListener { _, keyCode, _ ->
+                keyCode == KeyEvent.KEYCODE_BACK
+            }
+        }
+
+        fun setContent(content: @androidx.compose.runtime.Composable (OverlayWindow) -> Unit) {
+            view.setContent { content(this) }
+        }
+
+        fun show() {
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT,
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            }
+            wm.addView(view, params)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        }
+
+        fun remove() {
+            try {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+                wm.removeView(view)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not remove overlay", e)
+            } finally {
+                store.clear()
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "Tydl"
@@ -329,15 +365,13 @@ class GuardService : Service() {
         private const val ACTION_DISMISS = "io.github.serabin1.tydl.action.DISMISS"
         private const val ACTION_PAUSE = "io.github.serabin1.tydl.action.PAUSE"
         private const val ACTION_UNLOCK = "io.github.serabin1.tydl.action.UNLOCK"
-        private const val ACTION_SHOWN = "io.github.serabin1.tydl.action.SHOWN"
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_UNTIL = "until"
+        const val EXTRA_SHOW_PROMPT = "show_prompt"
+        const val EXTRA_SHOW_EXPIRY = "show_expiry"
         private const val UNLOCK_DEBOUNCE_MS = 1_500L
         private const val KEYGUARD_RETRY_MS = 600L
         private const val MAX_UNLOCK_ATTEMPTS = 3
-        private const val BRIDGE_LAUNCH_DELAY_MS = 150L
-        private const val BRIDGE_REMOVE_DELAY_MS = 1_500L
-        private const val HANDSHAKE_TIMEOUT_MS = 2_000L
 
         fun start(context: Context) = send(context, Intent(context, GuardService::class.java))
 
@@ -370,9 +404,6 @@ class GuardService : Service() {
             context,
             base(context).setAction(ACTION_UNLOCK),
         )
-
-        /** Called by a screen when it becomes visible, so the service can detect silent drops. */
-        fun markShown(context: Context) = send(context, base(context).setAction(ACTION_SHOWN))
 
         private fun base(context: Context) = Intent(context, GuardService::class.java)
 

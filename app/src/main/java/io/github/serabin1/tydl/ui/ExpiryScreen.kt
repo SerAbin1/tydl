@@ -1,10 +1,5 @@
 package io.github.serabin1.tydl.ui
 
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.addCallback
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,74 +17,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.Session
-import io.github.serabin1.tydl.guard.GuardService
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Ink
 import io.github.serabin1.tydl.ui.theme.Mist
 import io.github.serabin1.tydl.ui.theme.Tide
-import io.github.serabin1.tydl.ui.theme.TydlTheme
-
-/**
- * The deadline screen. "I'm done" is the clean exit; leaving via Home is treated as a
- * dismissal, which restarts the overrun nag instead of ending the session.
- */
-class ExpiryActivity : ComponentActivity() {
-
-    private var session by mutableStateOf<Session?>(null)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        session = GuardStore(this).load().session
-        if (session == null) {
-            finish()
-            return
-        }
-        setContent {
-            TydlTheme {
-                session?.let { current ->
-                    ExpiryScreen(
-                        session = current,
-                        now = System.currentTimeMillis(),
-                        onDone = {
-                            GuardService.end(this)
-                            finish()
-                        },
-                        onExtend = {
-                            GuardService.extend(this)
-                            finish()
-                        },
-                    )
-                }
-            }
-        }
-        onBackPressedDispatcher.addCallback(this) { /* Home is the only exit */ }
-    }
-
-    override fun onResume() {
-        GuardService.markShown(this)
-        super.onResume()
-        val current = GuardStore(this).load().session
-        if (current == null) finish() else session = current
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (!isFinishing) GuardService.dismiss(this)
-    }
-}
 
 @Composable
-private fun ExpiryScreen(
+fun ExpiryScreen(
     session: Session,
     now: Long,
     onDone: () -> Unit,

@@ -33,22 +33,7 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".ui.PromptActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="io.github.serabin1.tydl.prompt"
-            android:theme="@style/Theme.Tydl"
-            android:windowSoftInputMode="adjustResize" />
 
-        <activity
-            android:name=".ui.ExpiryActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="io.github.serabin1.tydl.expiry"
-            android:theme="@style/Theme.Tydl" />
 
         <service
             android:name=".guard.GuardService"

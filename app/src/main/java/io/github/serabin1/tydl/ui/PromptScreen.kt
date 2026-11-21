@@ -1,10 +1,5 @@
 package io.github.serabin1.tydl.ui
 
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.addCallback
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,57 +33,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.serabin1.tydl.guard.GuardService
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Ink
 import io.github.serabin1.tydl.ui.theme.Mist
-import io.github.serabin1.tydl.ui.theme.TydlTheme
 import io.github.serabin1.tydl.ui.theme.Tide
-
-/**
- * Shown on every unlock when no session is running. Not dismissible with Back; Home is the
- * only way out, which is the friction the whole app is made of.
- */
-class PromptActivity : ComponentActivity() {
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            TydlTheme {
-                PromptScreen(
-                    onStart = { reason ->
-                        GuardService.startSession(this, reason)
-                        finish()
-                    },
-                )
-            }
-        }
-        onBackPressedDispatcher.addCallback(this) { /* Home is the only exit */ }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        GuardService.markShown(this)
-    }
-}
 
 private val PRESETS = listOf("Email", "Message", "Look something up", "Maps", "Feed")
 private const val OTHER = "Other"
+
+fun promptReason(selected: String?, note: String): String? {
+    val trimmedNote = note.trim()
+    return when {
+        selected == null -> null
+        selected == OTHER -> trimmedNote.ifBlank { null }
+        trimmedNote.isEmpty() -> selected
+        else -> "$selected — $trimmedNote"
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PromptScreen(onStart: (String) -> Unit) {
     var selected by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf("") }
-
-    val trimmedNote = note.trim()
-    val reason = when {
-        selected == null -> null
-        selected == OTHER -> trimmedNote.ifBlank { null }
-        trimmedNote.isEmpty() -> selected
-        else -> "$selected — $trimmedNote"
-    }
+    val reason = promptReason(selected, note)
 
     Column(
         modifier = Modifier
