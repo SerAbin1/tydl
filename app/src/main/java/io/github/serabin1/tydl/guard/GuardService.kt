@@ -19,6 +19,7 @@ import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
+import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.ui.ExpiryActivity
 import io.github.serabin1.tydl.ui.PromptActivity
 import kotlinx.coroutines.CoroutineScope
@@ -116,6 +117,7 @@ class GuardService : Service() {
             ACTION_START -> handle(
                 GuardEvent.Start(
                     reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" },
+                    minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES),
                     now = now(),
                 ),
             )
@@ -331,6 +333,7 @@ class GuardService : Service() {
         private const val ACTION_UNLOCK = "io.github.serabin1.tydl.action.UNLOCK"
         private const val ACTION_SHOWN = "io.github.serabin1.tydl.action.SHOWN"
         private const val EXTRA_REASON = "reason"
+        private const val EXTRA_MINUTES = "minutes"
         private const val EXTRA_UNTIL = "until"
         private const val UNLOCK_DEBOUNCE_MS = 1_500L
         private const val KEYGUARD_RETRY_MS = 600L
@@ -341,9 +344,12 @@ class GuardService : Service() {
 
         fun start(context: Context) = send(context, Intent(context, GuardService::class.java))
 
-        fun startSession(context: Context, reason: String) = send(
+        fun startSession(context: Context, reason: String, minutes: Int) = send(
             context,
-            base(context).setAction(ACTION_START).putExtra(EXTRA_REASON, reason),
+            base(context)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_REASON, reason)
+                .putExtra(EXTRA_MINUTES, minutes),
         )
 
         fun end(context: Context) = send(context, base(context).setAction(ACTION_END))

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.guard.GuardService
+import io.github.serabin1.tydl.guard.LockAdminReceiver
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Ink
 import io.github.serabin1.tydl.ui.theme.Mist
@@ -62,6 +63,7 @@ class ExpiryActivity : ComponentActivity() {
                         now = System.currentTimeMillis(),
                         onDone = {
                             GuardService.end(this)
+                            LockAdminReceiver.lockScreen(this)
                             finish()
                         },
                         onExtend = {

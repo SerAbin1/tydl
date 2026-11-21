@@ -35,14 +35,19 @@ data class Session(
     companion object {
         const val MINUTE_MS = 60_000L
         const val DEFAULT_MINUTES = 5
+        const val MIN_MINUTES = 1
+        const val MAX_MINUTES = 180
         const val EXTENSION_MINUTES = 5
         const val MAX_EXTENSIONS = 2
 
-        fun start(reason: String, minutes: Int = DEFAULT_MINUTES, now: Long): Session = Session(
-            reason = reason,
-            startedAt = now,
-            endsAt = now + minutes * MINUTE_MS,
-            requestedMinutes = minutes,
-        )
+        fun start(reason: String, minutes: Int = DEFAULT_MINUTES, now: Long): Session {
+            val safeMinutes = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES)
+            return Session(
+                reason = reason,
+                startedAt = now,
+                endsAt = now + safeMinutes * MINUTE_MS,
+                requestedMinutes = safeMinutes,
+            )
+        }
     }
 }

@@ -19,7 +19,7 @@ sealed interface GuardEvent {
     /** Periodic heartbeat while the guard service is alive. */
     data class Tick(val now: Long) : GuardEvent
 
-    data class Start(val reason: String, val now: Long) : GuardEvent
+    data class Start(val reason: String, val minutes: Int, val now: Long) : GuardEvent
 
     data object End : GuardEvent
 
@@ -58,7 +58,11 @@ object GuardEngine {
         is GuardEvent.Tick -> onTick(state, event.now)
         is GuardEvent.Start -> GuardStep(
             state.copy(
-                session = Session.start(event.reason, now = event.now),
+                session = Session.start(
+                    reason = event.reason,
+                    minutes = event.minutes,
+                    now = event.now,
+                ),
                 expiryShownAt = null,
             ),
             GuardEffect.None,

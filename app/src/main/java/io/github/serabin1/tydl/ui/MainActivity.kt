@@ -1,6 +1,7 @@
 package io.github.serabin1.tydl.ui
 
 import android.Manifest
+import android.app.admin.DevicePolicyManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -48,6 +49,7 @@ import androidx.core.content.ContextCompat
 import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.guard.GuardService
+import io.github.serabin1.tydl.guard.LockAdminReceiver
 import io.github.serabin1.tydl.ui.theme.Edge
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Mist
@@ -65,6 +67,7 @@ class MainActivity : ComponentActivity() {
     private var lastUnlockAt by mutableStateOf(0L)
     private var overlayGranted by mutableStateOf(false)
     private var notificationsGranted by mutableStateOf(false)
+    private var deviceAdminGranted by mutableStateOf(false)
     private var batteryExempt by mutableStateOf(false)
 
     private val requestNotifications =
@@ -81,6 +84,7 @@ class MainActivity : ComponentActivity() {
                     lastUnlockAt = lastUnlockAt,
                     overlayGranted = overlayGranted,
                     notificationsGranted = notificationsGranted,
+                    deviceAdminGranted = deviceAdminGranted,
                     batteryExempt = batteryExempt,
                     onPause = { minutes ->
                         GuardService.pause(this, minutes)
@@ -96,6 +100,7 @@ class MainActivity : ComponentActivity() {
                             requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                     },
+                    onAllowDeviceAdmin = ::openDeviceAdminSettings,
                     onAllowBattery = ::requestBatteryExemption,
                     onOpenAppSettings = ::openAppSettings,
                     onTestUnlock = { GuardService.simulateUnlock(this) },
@@ -119,6 +124,7 @@ class MainActivity : ComponentActivity() {
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
+        deviceAdminGranted = LockAdminReceiver.isActive(this)
         batteryExempt = getSystemService(PowerManager::class.java)
             .isIgnoringBatteryOptimizations(packageName)
     }
@@ -141,6 +147,22 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun openDeviceAdminSettings() {
+        try {
+            startActivity(
+                Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                    putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, LockAdminReceiver.componentName(this@MainActivity))
+                    putExtra(
+                        DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                        "Tydl needs device admin so \"I'm done\" can lock your screen.",
+                    )
+                },
+            )
+        } catch (e: ActivityNotFoundException) {
+            openAppSettings()
+        }
+    }
+
     private fun requestBatteryExemption() {
         try {
             startActivity(
@@ -161,11 +183,13 @@ private fun MainScreen(
     lastUnlockAt: Long,
     overlayGranted: Boolean,
     notificationsGranted: Boolean,
+    deviceAdminGranted: Boolean,
     batteryExempt: Boolean,
     onPause: (Int) -> Unit,
     onResume: () -> Unit,
     onAllowOverlay: () -> Unit,
     onAllowNotifications: () -> Unit,
+    onAllowDeviceAdmin: () -> Unit,
     onAllowBattery: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onTestUnlock: () -> Unit,
@@ -286,7 +310,7 @@ private fun MainScreen(
             }
         }
 
-        if (!overlayGranted || !notificationsGranted) {
+        if (!overlayGranted || !notificationsGranted || !deviceAdminGranted) {
             Spacer(Modifier.height(28.dp))
             Text(
                 text = "SETUP",
@@ -311,6 +335,16 @@ private fun MainScreen(
                     body = "The guard needs a visible notification to keep running in the background.",
                     action = "Allow",
                     onClick = onAllowNotifications,
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+            if (!deviceAdminGranted) {
+                SetupCard(
+                    title = "Device admin",
+                    body = "Required for \"I'm done\" to lock your screen. Without it, Tydl can end " +
+                        "the session but cannot turn the screen off.",
+                    action = "Allow",
+                    onClick = onAllowDeviceAdmin,
                 )
             }
         }

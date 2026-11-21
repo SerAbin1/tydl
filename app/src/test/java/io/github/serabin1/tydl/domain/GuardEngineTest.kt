@@ -27,7 +27,7 @@ class GuardEngineTest {
     @Test
     fun `unlocking during a live session does not ask again`() {
         val state = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
 
         val step = unlocked(state, t0 + 2 * minute)
@@ -39,7 +39,7 @@ class GuardEngineTest {
     @Test
     fun `unlocking an overrun session shows the expiry overlay`() {
         val state = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
 
         val step = unlocked(state, t0 + 6 * minute)
@@ -51,7 +51,7 @@ class GuardEngineTest {
     @Test
     fun `ticking during a live session does nothing`() {
         val state = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
 
         val step = tick(state, t0 + 4 * minute)
@@ -62,7 +62,7 @@ class GuardEngineTest {
     @Test
     fun `expiry is shown once as soon as the session runs out`() {
         val state = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
 
         val step = tick(state, t0 + 5 * minute)
@@ -73,7 +73,7 @@ class GuardEngineTest {
     @Test
     fun `expiry is not shown again immediately after the first time`() {
         val expired = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
             .let { tick(it, t0 + 5 * minute) }
             .state
@@ -86,7 +86,7 @@ class GuardEngineTest {
     @Test
     fun `overrun nag returns only after the overrun interval`() {
         val expired = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
             .let { tick(it, t0 + 5 * minute) }
             .state
@@ -104,7 +104,7 @@ class GuardEngineTest {
     @Test
     fun `dismissing the expiry restarts the overrun clock`() {
         val expired = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
             .let { tick(it, t0 + 5 * minute) }
             .state
@@ -126,7 +126,7 @@ class GuardEngineTest {
     @Test
     fun `ending a session returns to idle and the next unlock asks again`() {
         val active = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
 
         val ended = GuardEngine.reduce(active, GuardEvent.End)
@@ -139,7 +139,7 @@ class GuardEngineTest {
     @Test
     fun `extending a session clears the expiry and revives it`() {
         val expired = GuardEngine
-            .reduce(GuardState(), GuardEvent.Start("Email", t0))
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
             .state
             .let { tick(it, t0 + 5 * minute) }
             .state
@@ -177,11 +177,12 @@ class GuardEngineTest {
     }
 
     @Test
-    fun `starting a session records the reason and the end time`() {
-        val step = GuardEngine.reduce(GuardState(), GuardEvent.Start("Look something up", t0))
+    fun `starting a session records the reason, requested minutes, and the end time`() {
+        val step = GuardEngine.reduce(GuardState(), GuardEvent.Start("Look something up", 7, t0))
 
         assertEquals("Look something up", step.state.session!!.reason)
-        assertEquals(t0 + 5 * minute, step.state.session!!.endsAt)
+        assertEquals(7, step.state.session!!.requestedMinutes)
+        assertEquals(t0 + 7 * minute, step.state.session!!.endsAt)
         assertEquals(GuardEffect.None, step.effect)
     }
 
