@@ -28,6 +28,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.serabin1.tydl.data.GuardStore
+import io.github.serabin1.tydl.domain.DoneOutcome
 import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
@@ -233,8 +234,7 @@ class GuardService : Service() {
                         session = session,
                         now = now(),
                         onDone = {
-                            end(this@GuardService)
-                            LockAdminReceiver.lockScreen(this@GuardService)
+                            endAndLock(this@GuardService)
                             overlay.remove()
                             expiryOverlay = null
                         },
@@ -388,6 +388,15 @@ class GuardService : Service() {
         )
 
         fun end(context: Context) = send(context, base(context).setAction(ACTION_END))
+
+        /** Ends the session and warns if the screen could not be locked. */
+        fun endAndLock(context: Context) {
+            end(context)
+            val warning = DoneOutcome.warning(LockAdminReceiver.lockScreen(context))
+            if (warning != null) {
+                GuardNotifications.warn(context, "Couldn't lock the screen", warning)
+            }
+        }
 
         fun extend(context: Context) = send(context, base(context).setAction(ACTION_EXTEND))
 

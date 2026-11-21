@@ -97,8 +97,7 @@ class MainActivity : ComponentActivity() {
                                 session = session,
                                 now = System.currentTimeMillis(),
                                 onDone = {
-                                    GuardService.end(this)
-                                    LockAdminReceiver.lockScreen(this)
+                                    GuardService.endAndLock(this)
                                     fallback = null
                                     refresh()
                                 },

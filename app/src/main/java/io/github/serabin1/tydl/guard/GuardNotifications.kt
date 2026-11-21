@@ -33,7 +33,7 @@ object GuardNotifications {
                 CHANNEL_ALERTS,
                 "Reminders",
                 NotificationManager.IMPORTANCE_HIGH,
-            ).apply { description = "Shown when Tydl cannot draw over other apps" },
+            ).apply { description = "Warnings when Tydl needs your attention" },
         )
     }
 
@@ -96,6 +96,12 @@ object GuardNotifications {
             .setAutoCancel(true)
             .setContentIntent(pending)
             .build()
+    }
+
+    /** A non-blocking warning, e.g. when "I'm done" could not lock the screen. */
+    fun warn(context: Context, title: String, text: String) {
+        context.getSystemService(NotificationManager::class.java)
+            .notify(ID_ALERT, alert(context, title, text, MainActivity::class.java))
     }
 
     private fun overBy(session: Session, now: Long): Int =

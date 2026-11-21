@@ -1,10 +1,7 @@
 package io.github.serabin1.tydl.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,8 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,27 +36,14 @@ import io.github.serabin1.tydl.ui.theme.Ink
 import io.github.serabin1.tydl.ui.theme.Mist
 import io.github.serabin1.tydl.ui.theme.Tide
 
-private val PRESETS = listOf("Email", "Message", "Look something up", "Maps", "Feed")
-private const val OTHER = "Other"
+fun promptReason(reason: String): String? = reason.trim().ifBlank { null }
 
-fun promptReason(selected: String?, note: String): String? {
-    val trimmedNote = note.trim()
-    return when {
-        selected == null -> null
-        selected == OTHER -> trimmedNote.ifBlank { null }
-        trimmedNote.isEmpty() -> selected
-        else -> "$selected — $trimmedNote"
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PromptScreen(onStart: (String, Int) -> Unit) {
-    var selected by remember { mutableStateOf<String?>(null) }
-    var note by remember { mutableStateOf("") }
+    var reasonText by remember { mutableStateOf("") }
     var minutesText by remember { mutableStateOf(Session.DEFAULT_MINUTES.toString()) }
 
-    val reason = promptReason(selected, note)
+    val reason = promptReason(reasonText)
     val minutes = minutesText.toIntOrNull()
         ?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
 
@@ -95,28 +77,11 @@ fun PromptScreen(onStart: (String, Int) -> Unit) {
             color = Mist,
         )
         Spacer(Modifier.height(36.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            (PRESETS + OTHER).forEach { preset ->
-                FilterChip(
-                    selected = selected == preset,
-                    onClick = { selected = preset },
-                    label = { Text(preset) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Tide,
-                        selectedLabelColor = Ink,
-                    ),
-                )
-            }
-        }
-        Spacer(Modifier.height(24.dp))
         OutlinedTextField(
-            value = note,
-            onValueChange = { note = it },
-            label = { Text("Add a note (optional)") },
+            value = reasonText,
+            onValueChange = { reasonText = it },
+            label = { Text("Reason") },
+            supportingText = { Text("Type why you're opening your phone.") },
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth(),
