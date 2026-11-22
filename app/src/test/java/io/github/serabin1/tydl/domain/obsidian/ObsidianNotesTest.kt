@@ -249,4 +249,17 @@ class ObsidianNotesTest {
         assertTrue(twice.indexOf("- felt rough") > twice.indexOf("- went well"))
         assertTrue(twice.contains("> [!quote] Consistency Before Greatness"))
     }
+
+    @Test
+    fun `task removal deletes the task line`() {
+        val updated = ObsidianNotes.withTaskRemoved(noteContent, "Write the design doc")
+
+        assertTrue(!updated.contains("Write the design doc"))
+        assertTrue(updated.contains("- [ ] Polish the settings screen"))
+    }
+
+    @Test
+    fun `task removal of an unknown task is a no-op`() {
+        assertEquals(noteContent, ObsidianNotes.withTaskRemoved(noteContent, "Nope"))
+    }
 }

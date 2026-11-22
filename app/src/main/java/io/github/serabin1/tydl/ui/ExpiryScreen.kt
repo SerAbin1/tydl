@@ -39,6 +39,8 @@ fun ExpiryScreen(
     now: Long,
     extensionsTodayCount: Int,
     extensionsTodayMinutes: Int,
+    task: String? = null,
+    onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
     onExtend: (Int) -> Unit,
 ) {
@@ -57,6 +59,8 @@ fun ExpiryScreen(
 
         ExpiryMode.Done -> DoneScreen(
             session = session,
+            task = task,
+            onTaskFinished = onTaskFinished,
             onDone = onDone,
         )
 

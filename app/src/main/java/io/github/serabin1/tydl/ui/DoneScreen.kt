@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,8 +39,11 @@ import io.github.serabin1.tydl.ui.theme.Tide
 @Composable
 fun DoneScreen(
     session: Session?,
+    task: String? = null,
+    onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
 ) {
+    var askFinish by remember { mutableStateOf(task != null) }
     var noteText by remember { mutableStateOf("") }
     val note = DoneOutcome.note(noteText)
 
@@ -54,7 +58,7 @@ fun DoneScreen(
     ) {
         Spacer(Modifier.height(48.dp))
         Text(
-            text = "HOW DID IT GO?",
+            text = if (askFinish) "DID YOU FINISH IT?" else "HOW DID IT GO?",
             style = MaterialTheme.typography.labelLarge,
             letterSpacing = 6.sp,
             color = Tide,
@@ -68,29 +72,63 @@ fun DoneScreen(
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "A line or two. Then we close.",
+            text = if (askFinish) {
+                "Did you finish the task?"
+            } else {
+                "A line or two. Then we close."
+            },
             style = MaterialTheme.typography.bodyLarge,
             color = Mist,
         )
         Spacer(Modifier.height(36.dp))
-        OutlinedTextField(
-            value = noteText,
-            onValueChange = { noteText = it },
-            label = { Text("How it went") },
-            supportingText = { Text("Required.") },
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(32.dp))
-        Button(
-            onClick = { note?.let(onDone) },
-            enabled = note != null,
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
-            modifier = Modifier.fillMaxWidth().height(58.dp),
-        ) {
-            Text("Close", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        if (askFinish) {
+            Button(
+                onClick = {
+                    askFinish = false
+                    onTaskFinished()
+                },
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Tide,
+                    contentColor = Ink,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp),
+            ) {
+                Text("Yes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { askFinish = false },
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+            ) {
+                Text("No", style = MaterialTheme.typography.titleMedium, color = Tide)
+            }
+            Spacer(Modifier.height(40.dp))
+        } else {
+            OutlinedTextField(
+                value = noteText,
+                onValueChange = { noteText = it },
+                label = { Text("How it went") },
+                supportingText = { Text("Required.") },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(32.dp))
+            Button(
+                onClick = { note?.let(onDone) },
+                enabled = note != null,
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
+                modifier = Modifier.fillMaxWidth().height(58.dp),
+            ) {
+                Text("Close", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(32.dp))
         }
-        Spacer(Modifier.height(32.dp))
     }
 }

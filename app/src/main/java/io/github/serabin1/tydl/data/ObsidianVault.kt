@@ -3,6 +3,7 @@ package io.github.serabin1.tydl.data
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -43,6 +44,25 @@ class ObsidianVault(private val context: Context) {
             }
         } ?: return false
         return writeToday(content)
+    }
+
+    /**
+     * Checks the picked task off in today's note: `- [ ]` becomes `- [x]` on that exact line, in
+     * place, via the pure flip and a write-verify style overwrite.
+     */
+    fun completeTask(taskText: String): Boolean {
+        if (!isConfigured()) return false
+        val content = readToday() ?: return false
+        val updated = ObsidianNotes.withTaskChecked(content, taskText)
+        if (updated == content) return false
+        return writeToday(updated)
+    }
+
+    /** Appends the how-it-went reflection, below any earlier reflection, above the closing quote. */
+    fun appendReflection(note: String): Boolean {
+        if (!isConfigured()) return false
+        val content = readToday() ?: return false
+        return writeToday(ObsidianNotes.withReflection(content, note))
     }
 
     fun todayFileName(): String =

@@ -37,13 +37,20 @@ import io.github.serabin1.tydl.ui.theme.Tide
 @Composable
 fun EarlyEndScreen(
     session: Session,
+    task: String? = null,
     onStartAnother: () -> Unit,
+    onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
 ) {
     var mode by remember { mutableStateOf(false) }
 
     if (mode) {
-        DoneScreen(session = session, onDone = onDone)
+        DoneScreen(
+            session = session,
+            task = task,
+            onTaskFinished = onTaskFinished,
+            onDone = onDone,
+        )
     } else {
         Column(
             modifier = Modifier

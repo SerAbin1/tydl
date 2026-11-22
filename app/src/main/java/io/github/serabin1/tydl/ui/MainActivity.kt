@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import io.github.serabin1.tydl.data.GuardStore
+import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.guard.GuardService
 import io.github.serabin1.tydl.guard.LockAdminReceiver
@@ -71,6 +72,7 @@ class MainActivity : ComponentActivity() {
     private var batteryExempt by mutableStateOf(false)
     private var fallback by mutableStateOf<String?>(null)
     private var earlyEnd by mutableStateOf(false)
+    private lateinit var obsidianVault: ObsidianVault
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
@@ -79,6 +81,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         GuardService.start(this)
+        obsidianVault = ObsidianVault(this)
         fallback = fallbackFrom(intent)
         setContent {
             TydlTheme {
@@ -88,13 +91,18 @@ class MainActivity : ComponentActivity() {
                         if (session != null) {
                             EarlyEndScreen(
                                 session = session,
+                                task = guardState.selectedTask,
                                 onStartAnother = {
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     earlyEnd = false
                                     refresh()
                                 },
-                                onDone = { _ ->
+                                onTaskFinished = {
+                                    guardState.selectedTask?.let { obsidianVault.completeTask(it) }
+                                },
+                                onDone = { note ->
+                                    obsidianVault.appendReflection(note)
                                     GuardService.endAndLock(this)
                                     earlyEnd = false
                                     refresh()
@@ -120,7 +128,12 @@ class MainActivity : ComponentActivity() {
                         when {
                             completed != null -> DoneScreen(
                                 session = completed,
-                                onDone = { _ ->
+                                task = guardState.selectedTask,
+                                onTaskFinished = {
+                                    guardState.selectedTask?.let { obsidianVault.completeTask(it) }
+                                },
+                                onDone = { note ->
+                                    obsidianVault.appendReflection(note)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
@@ -133,6 +146,10 @@ class MainActivity : ComponentActivity() {
                                 now = System.currentTimeMillis(),
                                 extensionsTodayCount = guardState.extensionsTodayCount,
                                 extensionsTodayMinutes = guardState.extensionsTodayMinutes,
+                                task = guardState.selectedTask,
+                                onTaskFinished = {
+                                    guardState.selectedTask?.let { obsidianVault.completeTask(it) }
+                                },
                                 onDone = { _ ->
                                     GuardService.endAndLock(this)
                                     fallback = null

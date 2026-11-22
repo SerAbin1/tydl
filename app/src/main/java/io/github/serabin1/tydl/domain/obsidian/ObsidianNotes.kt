@@ -142,6 +142,18 @@ object ObsidianNotes {
         return lines.joinToString("\n")
     }
 
+    /** Remove a task line (the one that was carried over) from a note. */
+    fun withTaskRemoved(content: String, taskText: String): String {
+        val lines = content.split("\n").toMutableList()
+        val index = lines.indexOfFirst { line ->
+            val task = line.toTask() ?: return@indexOfFirst false
+            task.text == taskText
+        }
+        if (index < 0) return content
+        lines.removeAt(index)
+        return lines.joinToString("\n")
+    }
+
     /**
      * Set the reflection. The first reflection of the day replaces the lone `- ` placeholder;
      * later ones append below, above the closing quote.

@@ -373,6 +373,17 @@ class GuardService : Service() {
         tasksOverlay = null
     }
 
+    /** Checks the picked task off in today's note when the user confirms the session is done. */
+    fun completeTask(): Boolean {
+        val taskText = state.selectedTask ?: return false
+        return vault?.completeTask(taskText) ?: false
+    }
+
+    /** Appends the how-it-went reflection to today's note, if the vault is configured. */
+    fun appendReflection(note: String) {
+        vault?.appendReflection(note)
+    }
+
     private fun showExpiry() = whenUnlocked("expiry") {
         val session = state.session ?: return@whenUnlocked
         // An unlock and a deadline can both ask for the expiry; rebuilding it would wipe whatever
@@ -428,9 +439,12 @@ class GuardService : Service() {
                 TydlTheme {
                     DoneScreen(
                         session = session,
-                        onDone = { _ ->
+                        task = state.selectedTask,
+                        onTaskFinished = { completeTask() },
+                        onDone = { note ->
                             end(this@GuardService)
                             simulateUnlock(this@GuardService)
+                            appendReflection(note)
                             overlay.remove()
                             doneOverlay = null
                         },
