@@ -7,6 +7,22 @@ import org.junit.Test
 
 class ObsidianNotesTest {
 
+    private val noteContent = """
+        Today, 22-11-2026
+
+        - [ ] Write the design doc
+        - [ ] Polish the settings screen
+
+        ---
+
+        - [ ] Buy groceries
+
+        ---
+
+        -
+        > [!quote] Consistency Before Greatness
+        """.trimIndent()
+
     private val template = """
         Today, 22-11-2026
 
@@ -199,5 +215,38 @@ class ObsidianNotesTest {
         val task = ObsidianTask(text = "[[Tydl]]: v0.8.0", checked = false)
 
         assertEquals("Tydl: v0.8.0", ObsidianNotes.display(task))
+    }
+
+    @Test
+    fun `flipping a task checks it off in place`() {
+        val updated = ObsidianNotes.withTaskChecked(noteContent, "Write the design doc")
+
+        assertTrue(updated.contains("- [x] Write the design doc"))
+        assertTrue(!updated.contains("- [ ] Write the design doc"))
+        assertTrue(updated.contains("- [ ] Polish the settings screen"))
+    }
+
+    @Test
+    fun `flipping an unknown task leaves the note alone`() {
+        assertEquals(noteContent, ObsidianNotes.withTaskChecked(noteContent, "Nope"))
+    }
+
+    @Test
+    fun `the first reflection replaces the lone placeholder`() {
+        val updated = ObsidianNotes.withReflection(noteContent, "went well")
+
+        assertTrue(updated.contains("- went well"))
+        assertTrue(!updated.contains("\n-\n") && !updated.contains("- \n"))
+    }
+
+    @Test
+    fun `later reflections append below the first, above the closing quote`() {
+        val once = ObsidianNotes.withReflection(noteContent, "went well")
+        val twice = ObsidianNotes.withReflection(once, "felt rough")
+
+        assertTrue(twice.contains("- went well"))
+        assertTrue(twice.contains("- felt rough"))
+        assertTrue(twice.indexOf("- felt rough") > twice.indexOf("- went well"))
+        assertTrue(twice.contains("> [!quote] Consistency Before Greatness"))
     }
 }
