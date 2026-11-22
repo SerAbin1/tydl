@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.os.IBinder
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -40,6 +41,7 @@ import io.github.serabin1.tydl.ui.PromptScreen
 import io.github.serabin1.tydl.ui.theme.TydlTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -64,12 +66,14 @@ class GuardService : Service() {
     private var lastUnlockAt = 0L
     private var promptOverlay: OverlayWindow? = null
     private var expiryOverlay: OverlayWindow? = null
+    private var keyguardPollJob: Job? = null
 
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_USER_PRESENT -> {
                     Log.i(TAG, "USER_PRESENT (keyguardLocked=${keyguard.isKeyguardLocked})")
+                    cancelKeyguardPoll("user present")
                     onUnlock()
                 }
 
@@ -77,14 +81,16 @@ class GuardService : Service() {
                     val locked = keyguard.isKeyguardLocked
                     Log.i(TAG, "SCREEN_ON (keyguardLocked=$locked)")
                     if (!locked) {
+                        cancelKeyguardPoll("screen on unlocked")
                         onUnlock()
                     } else {
-                        // The keyguard can be dismissed a beat after the screen comes on.
-                        scope.launch {
-                            delay(400)
-                            if (!keyguard.isKeyguardLocked) onUnlock()
-                        }
+                        startKeyguardPoll()
                     }
+                }
+
+                Intent.ACTION_SCREEN_OFF -> {
+                    Log.i(TAG, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
+                    cancelKeyguardPoll("screen off")
                 }
             }
         }
@@ -107,6 +113,7 @@ class GuardService : Service() {
             IntentFilter().apply {
                 addAction(Intent.ACTION_USER_PRESENT)
                 addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -150,6 +157,7 @@ class GuardService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "service destroyed")
+        cancelKeyguardPoll("destroy")
         scope.cancel()
         hidePrompt()
         hideExpiry()
@@ -170,6 +178,39 @@ class GuardService : Service() {
         lastUnlockAt = at
         store.saveLastUnlock(at)
         handle(GuardEvent.Unlocked(at))
+    }
+
+    /** Polls the keyguard after a locked SCREEN_ON until it unlocks or times out. */
+    private fun startKeyguardPoll() {
+        cancelKeyguardPoll("restart")
+        keyguardPollJob = scope.launch {
+            Log.i(TAG, "keyguard poll started")
+            val deadline = now() + KEYGUARD_POLL_TIMEOUT_MS
+            while (isActive && now() < deadline) {
+                delay(KEYGUARD_POLL_INTERVAL_MS)
+                if (!keyguard.isKeyguardLocked) {
+                    Log.i(TAG, "keyguard poll success")
+                    onUnlock()
+                    return@launch
+                }
+                val power = getSystemService(PowerManager::class.java)
+                if (power != null && !power.isInteractive) {
+                    Log.i(TAG, "keyguard poll stopped: screen off")
+                    return@launch
+                }
+            }
+            Log.i(TAG, "keyguard poll timeout")
+        }
+    }
+
+    private fun cancelKeyguardPoll(reason: String) {
+        keyguardPollJob?.let {
+            if (it.isActive) {
+                it.cancel()
+                Log.i(TAG, "keyguard poll cancelled: $reason")
+            }
+        }
+        keyguardPollJob = null
     }
 
     private fun handle(event: GuardEvent) {
@@ -376,6 +417,8 @@ class GuardService : Service() {
         private const val UNLOCK_DEBOUNCE_MS = 1_500L
         private const val KEYGUARD_RETRY_MS = 600L
         private const val MAX_UNLOCK_ATTEMPTS = 3
+        private const val KEYGUARD_POLL_INTERVAL_MS = 500L
+        private const val KEYGUARD_POLL_TIMEOUT_MS = 30_000L
 
         fun start(context: Context) = send(context, Intent(context, GuardService::class.java))
 
