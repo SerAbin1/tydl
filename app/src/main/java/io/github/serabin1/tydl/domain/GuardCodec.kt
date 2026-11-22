@@ -9,9 +9,10 @@ import java.net.URLEncoder
  */
 object GuardCodec {
 
-    private const val VERSION = "v3"
+    private const val VERSION = "v4"
     private const val NONE = "-"
     private const val SEPARATOR = "|"
+    private const val PARTS = 15
 
     fun encode(state: GuardState): String {
         val session = state.session
@@ -23,7 +24,6 @@ object GuardCodec {
             session?.requestedMinutes?.toString() ?: NONE,
             session?.extensionsUsed?.toString() ?: NONE,
             state.pausedUntil.toString(),
-            state.expiryShownAt?.toString() ?: NONE,
             state.extensionsTodayCount.toString(),
             state.extensionsTodayMinutes.toString(),
             state.extensionsDayStart.toString(),
@@ -39,25 +39,18 @@ object GuardCodec {
         if (raw.isNullOrBlank()) return GuardState()
         val parts = raw.split(SEPARATOR)
         return try {
-            if (parts[0] != VERSION || parts.size != 16) return GuardState()
-            decodeV3(parts)
+            if (parts[0] != VERSION || parts.size != PARTS) return GuardState()
+            GuardState(
+                session = decodeSession(parts, 1),
+                completedSession = decodeSession(parts, 10),
+                pausedUntil = parts[6].toLong(),
+                extensionsTodayCount = parts[7].toInt(),
+                extensionsTodayMinutes = parts[8].toInt(),
+                extensionsDayStart = parts[9].toLong(),
+            )
         } catch (e: Exception) {
             GuardState()
         }
-    }
-
-    private fun decodeV3(parts: List<String>): GuardState {
-        val session = decodeSession(parts, 1)
-        val completed = decodeSession(parts, 11)
-        return GuardState(
-            session = session,
-            completedSession = completed,
-            pausedUntil = parts[6].toLong(),
-            expiryShownAt = parts[7].takeIf { it != NONE }?.toLong(),
-            extensionsTodayCount = parts[8].toInt(),
-            extensionsTodayMinutes = parts[9].toInt(),
-            extensionsDayStart = parts[10].toLong(),
-        )
     }
 
     private fun decodeSession(parts: List<String>, reasonIndex: Int): Session? {

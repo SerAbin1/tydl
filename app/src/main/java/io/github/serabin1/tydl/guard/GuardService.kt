@@ -120,11 +120,7 @@ class GuardService : Service() {
         keyguard = getSystemService(KeyguardManager::class.java)
         power = getSystemService(PowerManager::class.java)
         state = store.load()
-        Log.i(
-            TAG,
-            "service created; session=${state.session?.reason ?: "none"} " +
-                "expiryShownAt=${state.expiryShownAt}",
-        )
+        Log.i(TAG, "service created; session=${state.session?.reason ?: "none"}")
         GuardNotifications.ensureChannels(this)
         ContextCompat.registerReceiver(
             this,
@@ -322,8 +318,8 @@ class GuardService : Service() {
 
     private fun showExpiry() = whenUnlocked("expiry") {
         val session = state.session ?: return@whenUnlocked
-        // The 3-minute nag must not tear down the overlay: rebuilding it would wipe whatever the
-        // user has typed into the extend form.
+        // An unlock and a deadline can both ask for the expiry; rebuilding it would wipe whatever
+        // the user has typed into the extend form.
         if (expiryOverlay != null) {
             Log.i(TAG, "expiry overlay already showing")
             return@whenUnlocked

@@ -21,7 +21,9 @@ class GuardCodecTest {
         val state = GuardState(
             session = Session.start("check the build", 5, t0).extend(t0 + minute),
             pausedUntil = t0 + 30 * minute,
-            expiryShownAt = t0 + 12 * minute,
+            extensionsTodayCount = 1,
+            extensionsTodayMinutes = 5,
+            extensionsDayStart = t0,
         )
 
         assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))

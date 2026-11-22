@@ -2,14 +2,12 @@ package io.github.serabin1.tydl.domain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GuardEngineTest {
 
     private val t0 = 1_000_000L
     private val minute = 60_000L
-    private val overrunInterval = 3 * minute
 
     private fun unlocked(state: GuardState, now: Long) =
         GuardEngine.reduce(state, GuardEvent.Unlocked(now))
@@ -41,12 +39,9 @@ class GuardEngineTest {
 
     @Test
     fun `unlocking an overrun session shows the expiry overlay`() {
-        val state = started()
-
-        val step = unlocked(state, t0 + 6 * minute)
+        val step = unlocked(started(), t0 + 6 * minute)
 
         assertEquals(GuardEffect.ShowExpiry, step.effect)
-        assertEquals(t0 + 6 * minute, step.state.expiryShownAt)
     }
 
     @Test
@@ -57,33 +52,10 @@ class GuardEngineTest {
     }
 
     @Test
-    fun `expiry is shown once as soon as the session runs out`() {
+    fun `expiry is shown when the session runs out`() {
         val step = deadline(started(), t0 + 5 * minute)
 
         assertEquals(GuardEffect.ShowExpiry, step.effect)
-    }
-
-    @Test
-    fun `expiry is not shown again immediately after the first time`() {
-        val expired = deadline(started(), t0 + 5 * minute).state
-
-        val step = deadline(expired, t0 + 5 * minute + 1_000)
-
-        assertEquals(GuardEffect.None, step.effect)
-    }
-
-    @Test
-    fun `overrun nag returns only after the overrun interval`() {
-        val expired = deadline(started(), t0 + 5 * minute).state
-
-        assertEquals(
-            GuardEffect.None,
-            deadline(expired, t0 + 5 * minute + overrunInterval - 1).effect,
-        )
-        assertEquals(
-            GuardEffect.ShowExpiry,
-            deadline(expired, t0 + 5 * minute + overrunInterval).effect,
-        )
     }
 
     @Test
@@ -113,16 +85,14 @@ class GuardEngineTest {
     }
 
     @Test
-    fun `extending a session clears the expiry and revives it`() {
+    fun `extending a session revives it`() {
         val expired = deadline(started(), t0 + 5 * minute).state
-            .also { assertTrue(it.session!!.isOverrun(t0 + 5 * minute)) }
 
         val step = GuardEngine.reduce(expired, GuardEvent.Extend(t0 + 5 * minute))
 
         assertEquals(GuardEffect.None, step.effect)
-        assertNull(step.state.expiryShownAt)
         assertEquals(t0 + 10 * minute, step.state.session!!.endsAt)
-        assertTrue(!step.state.session!!.isOverrun(t0 + 9 * minute))
+        assertEquals(GuardEffect.None, deadline(step.state, t0 + 9 * minute).effect)
     }
 
     @Test
@@ -200,26 +170,9 @@ class GuardEngineTest {
     }
 
     @Test
-    fun `an overdue session wakes immediately`() {
-        // e.g. the process restarted long after the session ran out.
-        assertEquals(t0 + 6 * minute, wake(started(), t0 + 6 * minute))
-    }
-
-    @Test
-    fun `a shown expiry wakes again only after the nag interval`() {
-        val shown = deadline(started(), t0 + 5 * minute).state
-
-        assertEquals(
-            t0 + 5 * minute + overrunInterval,
-            wake(shown, t0 + 5 * minute + 1_000),
-        )
-    }
-
-    @Test
-    fun `a nag that is already overdue wakes immediately`() {
-        val shown = deadline(started(), t0 + 5 * minute).state
-
-        assertEquals(t0 + 40 * minute, wake(shown, t0 + 40 * minute))
+    fun `an overrun session schedules no further wake`() {
+        assertEquals(t0 + 5 * minute, wake(started(), t0 + 5 * minute - 1))
+        assertNull(wake(started(), t0 + 5 * minute))
     }
 
     @Test

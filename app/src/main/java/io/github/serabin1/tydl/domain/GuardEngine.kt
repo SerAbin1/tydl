@@ -8,7 +8,6 @@ data class GuardState(
     val session: Session? = null,
     val completedSession: Session? = null,
     val pausedUntil: Long = 0L,
-    val expiryShownAt: Long? = null,
     val extensionsTodayCount: Int = 0,
     val extensionsTodayMinutes: Int = 0,
     val extensionsDayStart: Long = 0L,
@@ -56,8 +55,9 @@ data class GuardStep(val state: GuardState, val effect: GuardEffect)
  * Rules:
  * - No session + unlock => ask for a reason.
  * - Live session + unlock => nothing (a locked phone does not restart the ritual).
- * - Overrun session => show the expiry overlay, then repeat it at most once per
- *   [OVERRUN_INTERVAL_MS] until the user ends or extends.
+ * - Overrun session => show the expiry overlay. The unlock is the nag: every unlock while the
+ *   session is overrun shows it again. There is no timer for it, because the overlay cannot be
+ *   dismissed and the ongoing notification already counts the overrun live.
  * - Paused => silent, except that time keeps running.
  *
  * The guard never polls. [nextWakeAt] answers "when does the clock next matter?"; the shell arms
@@ -65,25 +65,19 @@ data class GuardStep(val state: GuardState, val effect: GuardEffect)
  */
 object GuardEngine {
 
-    val OVERRUN_INTERVAL_MS: Long = 3 * Session.MINUTE_MS
-
     fun dayStart(now: Long): Long = now - (now % (24L * 60 * 60 * 1000))
 
     /**
      * The next instant the guard needs to look at the clock, or null when nothing is pending.
      *
-     * Every branch is a deadline the reducer will act on, never a heartbeat:
-     * - a live session ends at [Session.endsAt];
-     * - an overrun session whose expiry is not up yet wakes now;
-     * - an overrun session already nagged wakes at the next nag;
-     * - a pause wakes when it ends so the notification stops saying "paused".
+     * Both branches are a deadline the reducer acts on, never a heartbeat: a live session ends at
+     * [Session.endsAt], and a pause ends at [GuardState.pausedUntil]. An overrun session schedules
+     * nothing: it was already surfaced when its deadline fired, and every unlock surfaces it again.
      */
     fun nextWakeAt(state: GuardState, now: Long): Long? {
         if (state.isPaused(now)) return state.pausedUntil
         val session = state.session ?: return null
-        if (!session.isOverrun(now)) return session.endsAt
-        val shown = state.expiryShownAt ?: return now
-        return maxOf(shown + OVERRUN_INTERVAL_MS, now)
+        return if (session.isOverrun(now)) null else session.endsAt
     }
 
     fun reduce(state: GuardState, event: GuardEvent): GuardStep = when (event) {
@@ -96,13 +90,12 @@ object GuardEngine {
                     minutes = event.minutes,
                     now = event.now,
                 ),
-                expiryShownAt = null,
             ),
             GuardEffect.None,
         )
 
         GuardEvent.End -> GuardStep(
-            state.copy(session = null, completedSession = null, expiryShownAt = null),
+            state.copy(session = null, completedSession = null),
             GuardEffect.None,
         )
 
@@ -117,7 +110,6 @@ object GuardEngine {
                 GuardStep(
                     state.copy(
                         session = session.extend(event.now, safeMinutes),
-                        expiryShownAt = null,
                         extensionsTodayCount = if (reset) 1 else state.extensionsTodayCount + 1,
                         extensionsTodayMinutes = if (reset) safeMinutes else state.extensionsTodayMinutes + safeMinutes,
                         extensionsDayStart = dayStart,
@@ -139,7 +131,7 @@ object GuardEngine {
         }
         val session = state.session ?: return GuardStep(state, GuardEffect.ShowPrompt)
         return if (session.isOverrun(now)) {
-            GuardStep(state.copy(expiryShownAt = now), GuardEffect.ShowExpiry)
+            GuardStep(state, GuardEffect.ShowExpiry)
         } else {
             GuardStep(state, GuardEffect.None)
         }
@@ -149,7 +141,7 @@ object GuardEngine {
         val session = state.session ?: return GuardStep(state, GuardEffect.None)
         return if (session.isOverrun(now)) {
             GuardStep(
-                state.copy(session = null, completedSession = session, expiryShownAt = null),
+                state.copy(session = null, completedSession = session),
                 GuardEffect.None,
             )
         } else {
@@ -160,11 +152,8 @@ object GuardEngine {
     private fun onDeadlineReached(state: GuardState, now: Long): GuardStep {
         if (state.isPaused(now)) return GuardStep(state, GuardEffect.None)
         val session = state.session ?: return GuardStep(state, GuardEffect.None)
-        if (!session.isOverrun(now)) return GuardStep(state, GuardEffect.None)
-
-        val lastShown = state.expiryShownAt
-        return if (lastShown == null || now - lastShown >= OVERRUN_INTERVAL_MS) {
-            GuardStep(state.copy(expiryShownAt = now), GuardEffect.ShowExpiry)
+        return if (session.isOverrun(now)) {
+            GuardStep(state, GuardEffect.ShowExpiry)
         } else {
             GuardStep(state, GuardEffect.None)
         }
