@@ -11,6 +11,8 @@ data class GuardState(
     val extensionsTodayCount: Int = 0,
     val extensionsTodayMinutes: Int = 0,
     val extensionsDayStart: Long = 0L,
+    /** The task this session was started for, if any; set by task picks, cleared when done. */
+    val selectedTask: String? = null,
 ) {
     fun isPaused(now: Long): Boolean = now < pausedUntil
 }
@@ -29,7 +31,12 @@ sealed interface GuardEvent {
      */
     data class DeadlineReached(val now: Long) : GuardEvent
 
-    data class Start(val reason: String, val minutes: Int, val now: Long) : GuardEvent
+    data class Start(
+        val reason: String,
+        val minutes: Int,
+        val now: Long,
+        val task: String? = null,
+    ) : GuardEvent
 
     data object End : GuardEvent
 
@@ -90,12 +97,13 @@ object GuardEngine {
                     minutes = event.minutes,
                     now = event.now,
                 ),
+                selectedTask = event.task,
             ),
             GuardEffect.None,
         )
 
         GuardEvent.End -> GuardStep(
-            state.copy(session = null, completedSession = null),
+            state.copy(session = null, completedSession = null, selectedTask = null),
             GuardEffect.None,
         )
 

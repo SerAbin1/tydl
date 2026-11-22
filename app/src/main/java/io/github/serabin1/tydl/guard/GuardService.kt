@@ -29,16 +29,20 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.serabin1.tydl.data.GuardStore
+import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.DoneOutcome
 import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.domain.Session
+import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
+import io.github.serabin1.tydl.domain.obsidian.ObsidianTask
 import io.github.serabin1.tydl.ui.DoneScreen
 import io.github.serabin1.tydl.ui.ExpiryScreen
 import io.github.serabin1.tydl.ui.MainActivity
 import io.github.serabin1.tydl.ui.PromptScreen
+import io.github.serabin1.tydl.ui.TasksScreen
 import io.github.serabin1.tydl.ui.theme.TydlTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +75,13 @@ class GuardService : Service() {
     private var promptOverlay: OverlayWindow? = null
     private var expiryOverlay: OverlayWindow? = null
     private var doneOverlay: OverlayWindow? = null
+    private var tasksOverlay: OverlayWindow? = null
     private var keyguardPollJob: Job? = null
+
+    /** Tasks picked from the vault for the current prompt, if the vault is configured. */
+    private var suggestedTasks: List<ObsidianTask> = emptyList()
+
+    private lateinit var vault: ObsidianVault
 
     /** Interrupts the deadline loop when something other than the clock changes what to wait for. */
     private val wakeSignal = Channel<Unit>(Channel.CONFLATED)
@@ -119,6 +129,7 @@ class GuardService : Service() {
         store = GuardStore(this)
         keyguard = getSystemService(KeyguardManager::class.java)
         power = getSystemService(PowerManager::class.java)
+        vault = ObsidianVault(this)
         state = store.load()
         Log.i(TAG, "service created; session=${state.session?.reason ?: "none"}")
         GuardNotifications.ensureChannels(this)
@@ -184,6 +195,7 @@ class GuardService : Service() {
                     reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" },
                     minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES),
                     now = now(),
+                    task = command.getStringExtra(EXTRA_TASK),
                 ),
             )
 
@@ -212,6 +224,7 @@ class GuardService : Service() {
         hidePrompt()
         hideExpiry()
         hideDone()
+        hideTasks()
         try {
             unregisterReceiver(unlockReceiver)
         } catch (e: IllegalArgumentException) {
@@ -294,6 +307,14 @@ class GuardService : Service() {
     }
 
     private fun showPrompt() = whenUnlocked("prompt") {
+        suggestedTasks = loadSuggestedTasks()
+        if (suggestedTasks.isNotEmpty()) {
+            showTasks(suggestedTasks) { task ->
+                suggestedTasks = emptyList()
+                startTask(this@GuardService, task)
+            }
+            return@whenUnlocked
+        }
         if (!Settings.canDrawOverlays(this)) {
             Log.i(TAG, "prompt: no overlay permission, using notification")
             notifyAlert(
@@ -314,6 +335,42 @@ class GuardService : Service() {
             }
             Log.i(TAG, "prompt overlay shown")
         }
+    }
+
+    private fun loadSuggestedTasks(): List<ObsidianTask> {
+        val vault = this.vault ?: return emptyList()
+        if (!vault.isConfigured()) return emptyList()
+        if (!vault.hasToday()) return emptyList()
+        val content = vault.readToday() ?: return emptyList()
+        return ObsidianNotes.suggestions(ObsidianNotes.parse(content, vault.todayFileName()))
+    }
+
+    private fun showTasks(tasks: List<ObsidianTask>, onTask: (ObsidianTask) -> Unit) {
+        hideTasks()
+        tasksOverlay = showOverlay { overlay ->
+            TydlTheme {
+                TasksScreen(
+                    tasks = tasks,
+                    onTask = { task ->
+                        suggestedTasks = emptyList()
+                        onTask(task)
+                        overlay.remove()
+                        tasksOverlay = null
+                    },
+                    onSomethingElse = {
+                        suggestedTasks = emptyList()
+                        overlay.remove()
+                        tasksOverlay = null
+                        showPrompt()
+                    },
+                )
+            }
+        }
+    }
+
+    private fun hideTasks() {
+        tasksOverlay?.remove()
+        tasksOverlay = null
     }
 
     private fun showExpiry() = whenUnlocked("expiry") {
@@ -509,6 +566,7 @@ class GuardService : Service() {
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_MINUTES = "minutes"
         private const val EXTRA_UNTIL = "until"
+        private const val EXTRA_TASK = "task"
         const val EXTRA_SHOW_PROMPT = "show_prompt"
         const val EXTRA_SHOW_EXPIRY = "show_expiry"
         private const val UNLOCK_DEBOUNCE_MS = 1_500L
@@ -519,12 +577,21 @@ class GuardService : Service() {
 
         fun start(context: Context) = send(context, Intent(context, GuardService::class.java))
 
-        fun startSession(context: Context, reason: String, minutes: Int) = send(
+        fun startSession(context: Context, reason: String, minutes: Int, taskText: String? = null) = send(
             context,
             base(context)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_REASON, reason)
-                .putExtra(EXTRA_MINUTES, minutes),
+                .putExtra(EXTRA_MINUTES, minutes)
+                .putExtra(EXTRA_TASK, taskText),
+        )
+
+        /** Starts a session for a suggested task; the task text is remembered for completion. */
+        fun startTask(context: Context, task: ObsidianTask) = startSession(
+            context,
+            ObsidianNotes.display(task),
+            Session.DEFAULT_MINUTES,
+            task.text,
         )
 
         fun end(context: Context) = send(context, base(context).setAction(ACTION_END))

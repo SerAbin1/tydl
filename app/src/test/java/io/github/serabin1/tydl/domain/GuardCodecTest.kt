@@ -20,11 +20,19 @@ class GuardCodecTest {
     fun `a full state round-trips`() {
         val state = GuardState(
             session = Session.start("check the build", 5, t0).extend(t0 + minute),
+            selectedTask = "[[Tydl]]: check the build",
             pausedUntil = t0 + 30 * minute,
             extensionsTodayCount = 1,
             extensionsTodayMinutes = 5,
             extensionsDayStart = t0,
         )
+
+        assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
+    }
+
+    @Test
+    fun `a task session round-trips`() {
+        val state = GuardState(session = Session.start("Write the design doc", 5, t0), selectedTask = "Write the design doc")
 
         assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
     }

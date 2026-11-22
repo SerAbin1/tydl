@@ -151,6 +151,36 @@ class GuardEngineTest {
     }
 
     @Test
+    fun `starting a task session records the task`() {
+        val step = GuardEngine.reduce(
+            GuardState(),
+            GuardEvent.Start("Write the design doc", 5, t0, task = "[[Tydl]]: Write the design doc"),
+        )
+
+        assertEquals("[[Tydl]]: Write the design doc", step.state.selectedTask)
+        assertEquals("Write the design doc", step.state.session?.reason)
+    }
+
+    @Test
+    fun `ending a task session clears the selected task`() {
+        val started = GuardEngine.reduce(
+            GuardState(),
+            GuardEvent.Start("Write the design doc", 5, t0, task = "Write the design doc"),
+        )
+        val ended = GuardEngine.reduce(started.state, GuardEvent.End)
+
+        assertNull(ended.state.selectedTask)
+        assertNull(ended.state.session)
+    }
+
+    @Test
+    fun `a free text session clears the selected task`() {
+        val started = GuardEngine.reduce(GuardState(), GuardEvent.Start("Look something up", 5, t0))
+
+        assertNull(started.state.selectedTask)
+    }
+
+    @Test
     fun `an idle guard schedules no wake`() {
         assertNull(wake(GuardState(), t0))
     }
