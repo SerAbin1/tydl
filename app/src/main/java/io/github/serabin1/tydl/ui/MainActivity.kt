@@ -115,9 +115,20 @@ class MainActivity : ComponentActivity() {
                     )
 
                     fallback == GuardService.EXTRA_SHOW_EXPIRY -> {
+                        val completed = guardState.completedSession
                         val session = guardState.session
-                        if (session != null) {
-                            ExpiryScreen(
+                        when {
+                            completed != null -> DoneScreen(
+                                session = completed,
+                                onDone = { _ ->
+                                    GuardService.end(this)
+                                    GuardService.simulateUnlock(this)
+                                    fallback = null
+                                    refresh()
+                                },
+                            )
+
+                            session != null -> ExpiryScreen(
                                 session = session,
                                 now = System.currentTimeMillis(),
                                 extensionsTodayCount = guardState.extensionsTodayCount,
@@ -133,9 +144,11 @@ class MainActivity : ComponentActivity() {
                                     refresh()
                                 },
                             )
-                        } else {
-                            fallback = null
-                            MainContent()
+
+                            else -> {
+                                fallback = null
+                                MainContent()
+                            }
                         }
                     }
 

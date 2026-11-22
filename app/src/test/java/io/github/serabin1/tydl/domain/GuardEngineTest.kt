@@ -190,4 +190,24 @@ class GuardEngineTest {
     fun `idle ticks never prompt`() {
         assertEquals(GuardEffect.None, tick(GuardState(), t0).effect)
     }
+
+    @Test
+    fun `screen off after expiry moves session to completed`() {
+        val active = GuardEngine
+            .reduce(GuardState(), GuardEvent.Start("Email", 5, t0))
+            .state
+        val expired = GuardEngine.reduce(active, GuardEvent.Tick(t0 + 5 * minute)).state
+        val step = GuardEngine.reduce(expired, GuardEvent.ScreenOff(t0 + 6 * minute))
+
+        assertNull(step.state.session)
+        assertEquals(expired.session, step.state.completedSession)
+    }
+
+    @Test
+    fun `unlock with completed session asks how it went`() {
+        val state = GuardState(completedSession = Session.start("Email", 5, t0))
+        val step = unlocked(state, t0 + minute)
+
+        assertEquals(GuardEffect.ShowDone, step.effect)
+    }
 }

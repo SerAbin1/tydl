@@ -6,6 +6,7 @@ package io.github.serabin1.tydl.domain
  */
 data class GuardState(
     val session: Session? = null,
+    val completedSession: Session? = null,
     val pausedUntil: Long = 0L,
     val expiryShownAt: Long? = null,
     val extensionsTodayCount: Int = 0,
@@ -32,12 +33,15 @@ sealed interface GuardEvent {
     data class Dismissed(val now: Long) : GuardEvent
 
     data class Paused(val until: Long) : GuardEvent
+
+    data class ScreenOff(val now: Long) : GuardEvent
 }
 
 sealed interface GuardEffect {
     data object None : GuardEffect
     data object ShowPrompt : GuardEffect
     data object ShowExpiry : GuardEffect
+    data object ShowDone : GuardEffect
 }
 
 data class GuardStep(val state: GuardState, val effect: GuardEffect)
@@ -74,9 +78,11 @@ object GuardEngine {
         )
 
         GuardEvent.End -> GuardStep(
-            state.copy(session = null, expiryShownAt = null),
+            state.copy(session = null, completedSession = null, expiryShownAt = null),
             GuardEffect.None,
         )
+
+        is GuardEvent.ScreenOff -> onScreenOff(state, event.now)
 
         is GuardEvent.Extend -> {
             val session = state.session
@@ -113,9 +119,24 @@ object GuardEngine {
 
     private fun onUnlocked(state: GuardState, now: Long): GuardStep {
         if (state.isPaused(now)) return GuardStep(state, GuardEffect.None)
+        if (state.completedSession != null) {
+            return GuardStep(state, GuardEffect.ShowDone)
+        }
         val session = state.session ?: return GuardStep(state, GuardEffect.ShowPrompt)
         return if (session.isOverrun(now)) {
             GuardStep(state.copy(expiryShownAt = now), GuardEffect.ShowExpiry)
+        } else {
+            GuardStep(state, GuardEffect.None)
+        }
+    }
+
+    private fun onScreenOff(state: GuardState, now: Long): GuardStep {
+        val session = state.session ?: return GuardStep(state, GuardEffect.None)
+        return if (session.isOverrun(now)) {
+            GuardStep(
+                state.copy(session = null, completedSession = session, expiryShownAt = null),
+                GuardEffect.None,
+            )
         } else {
             GuardStep(state, GuardEffect.None)
         }

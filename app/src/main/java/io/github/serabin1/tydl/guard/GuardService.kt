@@ -35,6 +35,7 @@ import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.domain.Session
+import io.github.serabin1.tydl.ui.DoneScreen
 import io.github.serabin1.tydl.ui.ExpiryScreen
 import io.github.serabin1.tydl.ui.MainActivity
 import io.github.serabin1.tydl.ui.PromptScreen
@@ -66,6 +67,7 @@ class GuardService : Service() {
     private var lastUnlockAt = 0L
     private var promptOverlay: OverlayWindow? = null
     private var expiryOverlay: OverlayWindow? = null
+    private var doneOverlay: OverlayWindow? = null
     private var keyguardPollJob: Job? = null
 
     private val unlockReceiver = object : BroadcastReceiver() {
@@ -91,6 +93,7 @@ class GuardService : Service() {
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.i(TAG, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
                     cancelKeyguardPoll("screen off")
+                    handle(GuardEvent.ScreenOff(now()))
                 }
             }
         }
@@ -166,6 +169,7 @@ class GuardService : Service() {
         scope.cancel()
         hidePrompt()
         hideExpiry()
+        hideDone()
         try {
             unregisterReceiver(unlockReceiver)
         } catch (e: IllegalArgumentException) {
@@ -233,11 +237,13 @@ class GuardService : Service() {
         when (step.effect) {
             GuardEffect.ShowPrompt -> showPrompt()
             GuardEffect.ShowExpiry -> showExpiry()
+            GuardEffect.ShowDone -> showDone()
             GuardEffect.None -> Unit
         }
         val now = now()
         if (state.session != null) hidePrompt()
         if (state.session?.isOverrun(now) != true) hideExpiry()
+        if (state.completedSession == null) hideDone()
     }
 
     private fun showPrompt() = whenUnlocked("prompt") {
@@ -296,6 +302,38 @@ class GuardService : Service() {
             }
             Log.i(TAG, "expiry overlay shown")
         }
+    }
+
+    private fun showDone() = whenUnlocked("done") {
+        val session = state.completedSession ?: return@whenUnlocked
+        if (!Settings.canDrawOverlays(this)) {
+            notifyAlert(
+                title = "Session ended",
+                text = "Tap to record how it went.",
+                extra = EXTRA_SHOW_EXPIRY,
+            )
+        } else {
+            hideDone()
+            doneOverlay = showOverlay { overlay ->
+                TydlTheme {
+                    DoneScreen(
+                        session = session,
+                        onDone = { _ ->
+                            end(this@GuardService)
+                            simulateUnlock(this@GuardService)
+                            overlay.remove()
+                            doneOverlay = null
+                        },
+                    )
+                }
+            }
+            Log.i(TAG, "done overlay shown")
+        }
+    }
+
+    private fun hideDone() {
+        doneOverlay?.remove()
+        doneOverlay = null
     }
 
     /**
