@@ -20,17 +20,21 @@ sealed interface GuardEvent {
     /** The device was unlocked. */
     data class Unlocked(val now: Long) : GuardEvent
 
-    /** Periodic heartbeat while the guard service is alive. */
-    data class Tick(val now: Long) : GuardEvent
+    /**
+     * A moment the guard itself scheduled via [GuardEngine.nextWakeAt] has arrived.
+     *
+     * Not a heartbeat: the shell arms one timer for the next instant that matters and sends this
+     * exactly then, or not at all. It may arrive late (the process was killed, the device dozed)
+     * or stale (queued before an extend), so the reducer re-checks the clock instead of trusting
+     * the caller.
+     */
+    data class DeadlineReached(val now: Long) : GuardEvent
 
     data class Start(val reason: String, val minutes: Int, val now: Long) : GuardEvent
 
     data object End : GuardEvent
 
     data class Extend(val now: Long, val minutes: Int = Session.EXTENSION_MINUTES) : GuardEvent
-
-    /** The expiry screen was dismissed without ending or extending. */
-    data class Dismissed(val now: Long) : GuardEvent
 
     data class Paused(val until: Long) : GuardEvent
 
@@ -55,6 +59,9 @@ data class GuardStep(val state: GuardState, val effect: GuardEffect)
  * - Overrun session => show the expiry overlay, then repeat it at most once per
  *   [OVERRUN_INTERVAL_MS] until the user ends or extends.
  * - Paused => silent, except that time keeps running.
+ *
+ * The guard never polls. [nextWakeAt] answers "when does the clock next matter?"; the shell arms
+ * a single timer for that instant and sends [GuardEvent.DeadlineReached].
  */
 object GuardEngine {
 
@@ -62,9 +69,26 @@ object GuardEngine {
 
     fun dayStart(now: Long): Long = now - (now % (24L * 60 * 60 * 1000))
 
+    /**
+     * The next instant the guard needs to look at the clock, or null when nothing is pending.
+     *
+     * Every branch is a deadline the reducer will act on, never a heartbeat:
+     * - a live session ends at [Session.endsAt];
+     * - an overrun session whose expiry is not up yet wakes now;
+     * - an overrun session already nagged wakes at the next nag;
+     * - a pause wakes when it ends so the notification stops saying "paused".
+     */
+    fun nextWakeAt(state: GuardState, now: Long): Long? {
+        if (state.isPaused(now)) return state.pausedUntil
+        val session = state.session ?: return null
+        if (!session.isOverrun(now)) return session.endsAt
+        val shown = state.expiryShownAt ?: return now
+        return maxOf(shown + OVERRUN_INTERVAL_MS, now)
+    }
+
     fun reduce(state: GuardState, event: GuardEvent): GuardStep = when (event) {
         is GuardEvent.Unlocked -> onUnlocked(state, event.now)
-        is GuardEvent.Tick -> onTick(state, event.now)
+        is GuardEvent.DeadlineReached -> onDeadlineReached(state, event.now)
         is GuardEvent.Start -> GuardStep(
             state.copy(
                 session = Session.start(
@@ -105,15 +129,6 @@ object GuardEngine {
             }
         }
 
-        is GuardEvent.Dismissed -> {
-            val session = state.session
-            if (session != null && session.isOverrun(event.now)) {
-                GuardStep(state.copy(expiryShownAt = event.now), GuardEffect.None)
-            } else {
-                GuardStep(state, GuardEffect.None)
-            }
-        }
-
         is GuardEvent.Paused -> GuardStep(state.copy(pausedUntil = event.until), GuardEffect.None)
     }
 
@@ -142,7 +157,7 @@ object GuardEngine {
         }
     }
 
-    private fun onTick(state: GuardState, now: Long): GuardStep {
+    private fun onDeadlineReached(state: GuardState, now: Long): GuardStep {
         if (state.isPaused(now)) return GuardStep(state, GuardEffect.None)
         val session = state.session ?: return GuardStep(state, GuardEffect.None)
         if (!session.isOverrun(now)) return GuardStep(state, GuardEffect.None)

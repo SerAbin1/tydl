@@ -45,9 +45,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Owns the only state that matters and turns [GuardEvent]s into screens.
@@ -61,6 +63,7 @@ class GuardService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var store: GuardStore
     private lateinit var keyguard: KeyguardManager
+    private lateinit var power: PowerManager
     private var state = GuardState()
 
     /** Debounces SCREEN_ON + USER_PRESENT arriving for the same unlock. */
@@ -69,6 +72,9 @@ class GuardService : Service() {
     private var expiryOverlay: OverlayWindow? = null
     private var doneOverlay: OverlayWindow? = null
     private var keyguardPollJob: Job? = null
+
+    /** Interrupts the deadline loop when something other than the clock changes what to wait for. */
+    private val wakeSignal = Channel<Unit>(Channel.CONFLATED)
 
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -88,12 +94,21 @@ class GuardService : Service() {
                     } else {
                         startKeyguardPoll()
                     }
+                    // Whether a deadline can be shown at all depends on the screen and keyguard.
+                    wakeSignal.trySend(Unit)
                 }
 
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.i(TAG, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
                     cancelKeyguardPoll("screen off")
                     handle(GuardEvent.ScreenOff(now()))
+                    wakeSignal.trySend(Unit)
+                }
+
+                Intent.ACTION_TIME_CHANGED,
+                Intent.ACTION_TIMEZONE_CHANGED -> {
+                    Log.i(TAG, "${intent.action}: clock changed")
+                    wakeSignal.trySend(Unit)
                 }
             }
         }
@@ -103,6 +118,7 @@ class GuardService : Service() {
         super.onCreate()
         store = GuardStore(this)
         keyguard = getSystemService(KeyguardManager::class.java)
+        power = getSystemService(PowerManager::class.java)
         state = store.load()
         Log.i(
             TAG,
@@ -117,6 +133,8 @@ class GuardService : Service() {
                 addAction(Intent.ACTION_USER_PRESENT)
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -125,12 +143,41 @@ class GuardService : Service() {
             GuardNotifications.guard(this, state),
         )
         Log.i(TAG, "foreground started")
+        startDeadlineLoop()
+    }
+
+    /**
+     * One coroutine for the service's whole life. It sleeps until the next deadline the domain
+     * named, or until a state change makes that deadline wrong — whichever comes first. There is
+     * no heartbeat: with nothing pending it blocks on [wakeSignal] instead of waking on a timer.
+     */
+    private fun startDeadlineLoop() {
         scope.launch {
             while (isActive) {
-                delay(1_000)
-                handle(GuardEvent.Tick(now()))
+                val at = nextWake()
+                if (at == null) {
+                    Log.i(TAG, "no deadline pending; waiting for a state change")
+                    wakeSignal.receive()
+                    continue
+                }
+                val wait = (at - now()).coerceAtLeast(0L)
+                Log.i(TAG, "next deadline in $wait ms")
+                val signalled = withTimeoutOrNull(wait) { wakeSignal.receive() }
+                if (signalled == null) {
+                    Log.i(TAG, "deadline reached")
+                    handle(GuardEvent.DeadlineReached(now()))
+                }
             }
         }
+    }
+
+    /**
+     * A deadline is only worth waking for when the expiry can actually be drawn: the overlay
+     * cannot appear over the keyguard, and the unlock broadcast covers the overdue case anyway.
+     */
+    private fun nextWake(): Long? {
+        val canShow = power.isInteractive && !keyguard.isKeyguardLocked
+        return if (canShow) GuardEngine.nextWakeAt(state, now()) else null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -151,7 +198,6 @@ class GuardService : Service() {
                     minutes = command.getIntExtra(EXTRA_MINUTES, Session.EXTENSION_MINUTES),
                 ),
             )
-            ACTION_DISMISS -> handle(GuardEvent.Dismissed(now()))
             ACTION_PAUSE -> handle(GuardEvent.Paused(command.getLongExtra(EXTRA_UNTIL, 0L)))
             ACTION_UNLOCK -> {
                 Log.i(TAG, "manual unlock requested")
@@ -179,6 +225,9 @@ class GuardService : Service() {
     }
 
     private fun onUnlock() {
+        // The keyguard coming down changes whether a deadline can be shown, even when the
+        // unlock itself changes no state (a live session, for instance).
+        wakeSignal.trySend(Unit)
         val at = now()
         if (at - lastUnlockAt < UNLOCK_DEBOUNCE_MS) {
             Log.i(TAG, "unlock debounced (${at - lastUnlockAt} ms)")
@@ -202,8 +251,7 @@ class GuardService : Service() {
                     onUnlock()
                     return@launch
                 }
-                val power = getSystemService(PowerManager::class.java)
-                if (power != null && !power.isInteractive) {
+                if (!power.isInteractive) {
                     Log.i(TAG, "keyguard poll stopped: screen off")
                     return@launch
                 }
@@ -224,11 +272,13 @@ class GuardService : Service() {
 
     private fun handle(event: GuardEvent) {
         val step = GuardEngine.reduce(state, event)
-        if (step.state != state) {
+        val changed = step.state != state
+        if (changed) {
             state = step.state
             store.save(state)
-            notifyGuard()
         }
+        // Cheap and silent, and it keeps a paused guard from claiming to be paused after it ends.
+        notifyGuard()
         Log.i(
             TAG,
             "event=${event::class.simpleName} effect=${step.effect::class.simpleName} " +
@@ -244,6 +294,7 @@ class GuardService : Service() {
         if (state.session != null) hidePrompt()
         if (state.session?.isOverrun(now) != true) hideExpiry()
         if (state.completedSession == null) hideDone()
+        if (changed) wakeSignal.trySend(Unit)
     }
 
     private fun showPrompt() = whenUnlocked("prompt") {
@@ -271,6 +322,12 @@ class GuardService : Service() {
 
     private fun showExpiry() = whenUnlocked("expiry") {
         val session = state.session ?: return@whenUnlocked
+        // The 3-minute nag must not tear down the overlay: rebuilding it would wipe whatever the
+        // user has typed into the extend form.
+        if (expiryOverlay != null) {
+            Log.i(TAG, "expiry overlay already showing")
+            return@whenUnlocked
+        }
         if (!Settings.canDrawOverlays(this)) {
             Log.i(TAG, "expiry: no overlay permission, using notification")
             notifyAlert(
@@ -451,7 +508,6 @@ class GuardService : Service() {
         private const val ACTION_START = "io.github.serabin1.tydl.action.START"
         private const val ACTION_END = "io.github.serabin1.tydl.action.END"
         private const val ACTION_EXTEND = "io.github.serabin1.tydl.action.EXTEND"
-        private const val ACTION_DISMISS = "io.github.serabin1.tydl.action.DISMISS"
         private const val ACTION_PAUSE = "io.github.serabin1.tydl.action.PAUSE"
         private const val ACTION_UNLOCK = "io.github.serabin1.tydl.action.UNLOCK"
         private const val EXTRA_REASON = "reason"
@@ -492,8 +548,6 @@ class GuardService : Service() {
                 .setAction(ACTION_EXTEND)
                 .putExtra(EXTRA_MINUTES, minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)),
         )
-
-        fun dismiss(context: Context) = send(context, base(context).setAction(ACTION_DISMISS))
 
         fun pause(context: Context, minutes: Int) = send(
             context,
