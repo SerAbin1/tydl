@@ -142,7 +142,12 @@ class GuardService : Service() {
             )
 
             ACTION_END -> handle(GuardEvent.End)
-            ACTION_EXTEND -> handle(GuardEvent.Extend(now()))
+            ACTION_EXTEND -> handle(
+                GuardEvent.Extend(
+                    now = now(),
+                    minutes = command.getIntExtra(EXTRA_MINUTES, Session.EXTENSION_MINUTES),
+                ),
+            )
             ACTION_DISMISS -> handle(GuardEvent.Dismissed(now()))
             ACTION_PAUSE -> handle(GuardEvent.Paused(command.getLongExtra(EXTRA_UNTIL, 0L)))
             ACTION_UNLOCK -> {
@@ -274,13 +279,15 @@ class GuardService : Service() {
                     ExpiryScreen(
                         session = session,
                         now = now(),
-                        onDone = {
+                        extensionsTodayCount = state.extensionsTodayCount,
+                        extensionsTodayMinutes = state.extensionsTodayMinutes,
+                        onDone = { _ ->
                             endAndLock(this@GuardService)
                             overlay.remove()
                             expiryOverlay = null
                         },
-                        onExtend = {
-                            extend(this@GuardService)
+                        onExtend = { minutes ->
+                            extend(this@GuardService, minutes)
                             overlay.remove()
                             expiryOverlay = null
                         },
@@ -441,7 +448,12 @@ class GuardService : Service() {
             }
         }
 
-        fun extend(context: Context) = send(context, base(context).setAction(ACTION_EXTEND))
+        fun extend(context: Context, minutes: Int = Session.EXTENSION_MINUTES) = send(
+            context,
+            base(context)
+                .setAction(ACTION_EXTEND)
+                .putExtra(EXTRA_MINUTES, minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)),
+        )
 
         fun dismiss(context: Context) = send(context, base(context).setAction(ACTION_DISMISS))
 

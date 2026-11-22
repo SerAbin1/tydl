@@ -8,6 +8,9 @@ data class GuardState(
     val session: Session? = null,
     val pausedUntil: Long = 0L,
     val expiryShownAt: Long? = null,
+    val extensionsTodayCount: Int = 0,
+    val extensionsTodayMinutes: Int = 0,
+    val extensionsDayStart: Long = 0L,
 ) {
     fun isPaused(now: Long): Boolean = now < pausedUntil
 }
@@ -23,7 +26,7 @@ sealed interface GuardEvent {
 
     data object End : GuardEvent
 
-    data class Extend(val now: Long) : GuardEvent
+    data class Extend(val now: Long, val minutes: Int = Session.EXTENSION_MINUTES) : GuardEvent
 
     /** The expiry screen was dismissed without ending or extending. */
     data class Dismissed(val now: Long) : GuardEvent
@@ -53,6 +56,8 @@ object GuardEngine {
 
     val OVERRUN_INTERVAL_MS: Long = 3 * Session.MINUTE_MS
 
+    fun dayStart(now: Long): Long = now - (now % (24L * 60 * 60 * 1000))
+
     fun reduce(state: GuardState, event: GuardEvent): GuardStep = when (event) {
         is GuardEvent.Unlocked -> onUnlocked(state, event.now)
         is GuardEvent.Tick -> onTick(state, event.now)
@@ -76,10 +81,16 @@ object GuardEngine {
         is GuardEvent.Extend -> {
             val session = state.session
             if (session != null && session.canExtend()) {
+                val safeMinutes = event.minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
+                val dayStart = dayStart(event.now)
+                val reset = state.extensionsDayStart != dayStart
                 GuardStep(
                     state.copy(
-                        session = session.extend(event.now),
+                        session = session.extend(event.now, safeMinutes),
                         expiryShownAt = null,
+                        extensionsTodayCount = if (reset) 1 else state.extensionsTodayCount + 1,
+                        extensionsTodayMinutes = if (reset) safeMinutes else state.extensionsTodayMinutes + safeMinutes,
+                        extensionsDayStart = dayStart,
                     ),
                     GuardEffect.None,
                 )

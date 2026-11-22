@@ -24,10 +24,11 @@ data class Session(
      * Extension time is added from the current end, or from now when the session has already
      * overrun, so extending an expired session always buys the full extension length.
      */
-    fun extend(now: Long): Session {
+    fun extend(now: Long, minutes: Int = EXTENSION_MINUTES): Session {
         if (!canExtend()) return this
+        val safeMinutes = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES)
         return copy(
-            endsAt = maxOf(endsAt, now) + EXTENSION_MINUTES * MINUTE_MS,
+            endsAt = maxOf(endsAt, now) + safeMinutes * MINUTE_MS,
             extensionsUsed = extensionsUsed + 1,
         )
     }

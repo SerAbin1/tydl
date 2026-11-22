@@ -21,4 +21,11 @@ class PromptReasonTest {
     fun `interior whitespace and unicode survive`() {
         assertEquals("a b — café 🚀", promptReason("  a b — café 🚀  "))
     }
+
+    @Test
+    fun `promptMinutes accepts in-range values`() {
+        assertEquals(5, promptMinutes("5"))
+        assertNull(promptMinutes("0"))
+        assertNull(promptMinutes("abc"))
+    }
 }

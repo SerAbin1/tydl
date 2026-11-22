@@ -1,5 +1,6 @@
 package io.github.serabin1.tydl.domain
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,5 +17,11 @@ class DoneOutcomeTest {
         val message = DoneOutcome.warning(lockSucceeded = false)
 
         assertTrue(message!!.contains("device admin", ignoreCase = true))
+    }
+
+    @Test
+    fun `blank done note is rejected`() {
+        assertNull(DoneOutcome.note("   "))
+        assertEquals("went well", DoneOutcome.note("  went well  "))
     }
 }

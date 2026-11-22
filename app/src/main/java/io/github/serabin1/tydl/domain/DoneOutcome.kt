@@ -12,4 +12,6 @@ object DoneOutcome {
 
     fun warning(lockSucceeded: Boolean): String? =
         if (lockSucceeded) null else LOCK_FAILED_MESSAGE
+
+    fun note(text: String): String? = text.trim().ifBlank { null }
 }

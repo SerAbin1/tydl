@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,14 +39,16 @@ import io.github.serabin1.tydl.ui.theme.Tide
 
 fun promptReason(reason: String): String? = reason.trim().ifBlank { null }
 
+fun promptMinutes(text: String): Int? =
+    text.toIntOrNull()?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
+
 @Composable
 fun PromptScreen(onStart: (String, Int) -> Unit) {
     var reasonText by remember { mutableStateOf("") }
-    var minutesText by remember { mutableStateOf(Session.DEFAULT_MINUTES.toString()) }
+    var minutesText by remember { mutableStateOf("") }
 
     val reason = promptReason(reasonText)
-    val minutes = minutesText.toIntOrNull()
-        ?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
+    val minutes = promptMinutes(minutesText)
 
     Column(
         modifier = Modifier
@@ -83,6 +86,7 @@ fun PromptScreen(onStart: (String, Int) -> Unit) {
             label = { Text("Reason") },
             supportingText = { Text("Type why you're opening your phone.") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth(),
         )

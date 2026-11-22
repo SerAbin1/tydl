@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     private var deviceAdminGranted by mutableStateOf(false)
     private var batteryExempt by mutableStateOf(false)
     private var fallback by mutableStateOf<String?>(null)
+    private var earlyEnd by mutableStateOf(false)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
@@ -81,8 +82,31 @@ class MainActivity : ComponentActivity() {
         fallback = fallbackFrom(intent)
         setContent {
             TydlTheme {
-                when (fallback) {
-                    GuardService.EXTRA_SHOW_PROMPT -> PromptScreen(
+                when {
+                    earlyEnd -> {
+                        val session = guardState.session
+                        if (session != null) {
+                            EarlyEndScreen(
+                                session = session,
+                                onStartAnother = {
+                                    GuardService.end(this)
+                                    GuardService.simulateUnlock(this)
+                                    earlyEnd = false
+                                    refresh()
+                                },
+                                onDone = { _ ->
+                                    GuardService.endAndLock(this)
+                                    earlyEnd = false
+                                    refresh()
+                                },
+                            )
+                        } else {
+                            earlyEnd = false
+                            MainContent()
+                        }
+                    }
+
+                    fallback == GuardService.EXTRA_SHOW_PROMPT -> PromptScreen(
                         onStart = { reason, minutes ->
                             GuardService.startSession(this, reason, minutes)
                             fallback = null
@@ -90,19 +114,21 @@ class MainActivity : ComponentActivity() {
                         },
                     )
 
-                    GuardService.EXTRA_SHOW_EXPIRY -> {
+                    fallback == GuardService.EXTRA_SHOW_EXPIRY -> {
                         val session = guardState.session
                         if (session != null) {
                             ExpiryScreen(
                                 session = session,
                                 now = System.currentTimeMillis(),
-                                onDone = {
+                                extensionsTodayCount = guardState.extensionsTodayCount,
+                                extensionsTodayMinutes = guardState.extensionsTodayMinutes,
+                                onDone = { _ ->
                                     GuardService.endAndLock(this)
                                     fallback = null
                                     refresh()
                                 },
-                                onExtend = {
-                                    GuardService.extend(this)
+                                onExtend = { minutes ->
+                                    GuardService.extend(this, minutes)
                                     fallback = null
                                     refresh()
                                 },
@@ -160,6 +186,7 @@ class MainActivity : ComponentActivity() {
             onAllowBattery = ::requestBatteryExemption,
             onOpenAppSettings = ::openAppSettings,
             onTestUnlock = { GuardService.simulateUnlock(this) },
+            onEndEarly = { earlyEnd = true },
         )
     }
 
@@ -247,6 +274,7 @@ private fun MainScreen(
     onAllowBattery: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onTestUnlock: () -> Unit,
+    onEndEarly: () -> Unit,
 ) {
     val now = System.currentTimeMillis()
     val context = LocalContext.current
@@ -361,6 +389,17 @@ private fun MainScreen(
                         Text("${minutes}m")
                     }
                 }
+            }
+        }
+
+        if (session != null) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onEndEarly,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("End session early")
             }
         }
 
