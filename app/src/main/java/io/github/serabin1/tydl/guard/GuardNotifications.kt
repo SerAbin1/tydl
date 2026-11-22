@@ -9,7 +9,6 @@ import android.content.Intent
 import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import io.github.serabin1.tydl.domain.GuardState
-import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.ui.MainActivity
 
 object GuardNotifications {
@@ -56,15 +55,19 @@ object GuardNotifications {
                 .setContentTitle("Tydl is guarding")
                 .setContentText("State your reason when you next unlock.")
 
+            // Everything below is a static string plus a chronometer. Never put a snapshot of
+            // "minutes left" in the text: the notification is only rebuilt on state changes, so
+            // it would freeze while the chronometer kept counting, and the two would disagree.
             session.isOverrun(now) -> builder
                 .setContentTitle("Time's up")
-                .setContentText(
-                    "\"${session.reason}\" — over by ${overBy(session, now)} min",
-                )
+                .setContentText("\u201C${session.reason}\u201D")
+                .setWhen(session.endsAt)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(false)
 
             else -> builder
                 .setContentTitle(session.reason)
-                .setContentText("${session.remainingMinutes(now)} min left")
+                .setContentText("Until ${clock(context, session.endsAt)}")
                 .setWhen(session.endsAt)
                 .setUsesChronometer(true)
                 .setChronometerCountDown(true)
@@ -103,9 +106,6 @@ object GuardNotifications {
         context.getSystemService(NotificationManager::class.java)
             .notify(ID_ALERT, alert(context, title, text, MainActivity::class.java))
     }
-
-    private fun overBy(session: Session, now: Long): Int =
-        (((now - session.endsAt).coerceAtLeast(0L)) / Session.MINUTE_MS).toInt()
 
     private fun clock(context: Context, at: Long): String =
         DateFormat.getTimeFormat(context).format(at)
