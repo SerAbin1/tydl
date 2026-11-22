@@ -197,7 +197,6 @@ class MainActivity : ComponentActivity() {
             },
             onAllowDeviceAdmin = ::openDeviceAdminSettings,
             onAllowBattery = ::requestBatteryExemption,
-            onOpenAppSettings = ::openAppSettings,
             onTestUnlock = { GuardService.simulateUnlock(this) },
             onEndEarly = { earlyEnd = true },
         )
@@ -285,7 +284,6 @@ private fun MainScreen(
     onAllowNotifications: () -> Unit,
     onAllowDeviceAdmin: () -> Unit,
     onAllowBattery: () -> Unit,
-    onOpenAppSettings: () -> Unit,
     onTestUnlock: () -> Unit,
     onEndEarly: () -> Unit,
 ) {
@@ -463,15 +461,7 @@ private fun MainScreen(
             color = Mist,
         )
         Spacer(Modifier.height(8.dp))
-        SetupCard(
-            title = "Nothing appeared on unlock?",
-            body = "ColorOS and OxygenOS kill background apps unless you allow them. In the app " +
-                "settings, enable Auto-launch and Allow background activity.",
-            action = "Open app settings",
-            onClick = onOpenAppSettings,
-        )
         if (!batteryExempt) {
-            Spacer(Modifier.height(10.dp))
             SetupCard(
                 title = "Battery optimization",
                 body = "Your phone is allowed to freeze Tydl to save power. Exempting it keeps the " +
@@ -479,8 +469,8 @@ private fun MainScreen(
                 action = "Allow",
                 onClick = onAllowBattery,
             )
+            Spacer(Modifier.height(10.dp))
         }
-        Spacer(Modifier.height(10.dp))
         OutlinedButton(
             onClick = onTestUnlock,
             shape = RoundedCornerShape(14.dp),
