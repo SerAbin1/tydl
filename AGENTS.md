@@ -1,4 +1,5 @@
 - Engineering daybook: `/home/sonu007/Documents/Obsidian/Software_Development/Projects/Tydl.md` is my read-only project notebook, ordered newest-first; consult it only when explicitly requested or relevant to the task.
 - No emulators; I'll connect and run on real android phone
 - Changes: Explain the proposed approach and wait for approval before editing files.
-- tdd always; functional core, imperative shell 
+- tdd always; functional core, imperative shell
+- backward compatibility is not required; unless it will break existing apps 

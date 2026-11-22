@@ -10,8 +10,6 @@ import java.net.URLEncoder
 object GuardCodec {
 
     private const val VERSION = "v3"
-    private const val V2_VERSION = "v2"
-    private const val LEGACY_VERSION = "v1"
     private const val NONE = "-"
     private const val SEPARATOR = "|"
 
@@ -41,65 +39,11 @@ object GuardCodec {
         if (raw.isNullOrBlank()) return GuardState()
         val parts = raw.split(SEPARATOR)
         return try {
-            when (parts[0]) {
-                LEGACY_VERSION -> {
-                    if (parts.size != 8) return GuardState()
-                    decodeV1(parts)
-                }
-                V2_VERSION -> {
-                    if (parts.size != 11) return GuardState()
-                    decodeV2(parts)
-                }
-                VERSION -> {
-                    if (parts.size != 16) return GuardState()
-                    decodeV3(parts)
-                }
-                else -> GuardState()
-            }
+            if (parts[0] != VERSION || parts.size != 16) return GuardState()
+            decodeV3(parts)
         } catch (e: Exception) {
             GuardState()
         }
-    }
-
-    private fun decodeV1(parts: List<String>): GuardState {
-        val session = if (parts[1].isEmpty()) {
-            null
-        } else {
-            Session(
-                reason = URLDecoder.decode(parts[1], Charsets.UTF_8.name()),
-                startedAt = parts[2].toLong(),
-                endsAt = parts[3].toLong(),
-                requestedMinutes = parts[4].toInt(),
-                extensionsUsed = parts[5].toInt(),
-            )
-        }
-        return GuardState(
-            session = session,
-            pausedUntil = parts[6].toLong(),
-            expiryShownAt = parts[7].takeIf { it != NONE }?.toLong(),
-        )
-    }
-
-    private fun decodeV2(parts: List<String>): GuardState {
-        val session = if (parts[1].isEmpty()) {
-            null
-        } else {
-            Session(
-                reason = URLDecoder.decode(parts[1], Charsets.UTF_8.name()),
-                startedAt = parts[2].toLong(),
-                endsAt = parts[3].toLong(),
-                requestedMinutes = parts[4].toInt(),
-                extensionsUsed = parts[5].toInt(),
-            )
-        }
-        return GuardState(
-            session = session,
-            pausedUntil = parts[6].toLong(),
-            expiryShownAt = parts[7].takeIf { it != NONE }?.toLong(),
-            extensionsTodayCount = parts[8].toInt(),
-            extensionsTodayMinutes = parts[9].toInt(),
-            extensionsDayStart = parts[10].toLong(),
-        )
     }
 
     private fun decodeV3(parts: List<String>): GuardState {
