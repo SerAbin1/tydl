@@ -268,7 +268,7 @@ class MainActivity : ComponentActivity() {
         manager.requestAddTileService(
             ComponentName(this, DailyNoteTileService::class.java),
             getString(R.string.tile_daily_note_label),
-            Icon.createWithResource(this, R.drawable.ic_tile_daily_note),
+            Icon.createWithResource(this, android.R.drawable.ic_menu_my_calendar),
             mainExecutor,
         ) { result ->
             val message = when (result) {
