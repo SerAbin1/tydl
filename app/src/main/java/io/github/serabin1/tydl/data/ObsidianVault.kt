@@ -29,22 +29,35 @@ class ObsidianVault(private val context: Context) {
 
     fun writeToday(content: String): Boolean {
         val document = todayDocument() ?: return false
-        context.contentResolver.openOutputStream(document.uri, "overwrite")?.use { stream ->
-            stream.write(content.toByteArray(Charsets.UTF_8))
-        }
-        return true
+        return writeDocument(document, content)
+    }
+
+    fun writeNote(name: String, content: String): Boolean {
+        val document = findFile(name) ?: return false
+        return writeDocument(document, content)
     }
 
     fun createTodayFromTemplate(): Boolean {
         if (todayDocument() != null) return true
-        val templateUri = settings.templateUri ?: return false
-        val template = DocumentFile.fromSingleUri(context, Uri.parse(templateUri)) ?: return false
-        val content = template.uri?.let { uri ->
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                String(stream.readBytes(), Charsets.UTF_8)
-            }
+        val templateContent = readTemplate() ?: return false
+        val tree = vaultTree() ?: return false
+        val created = tree.createFile("text/markdown", todayFileName()) ?: return false
+        return writeDocument(created, templateContent)
+    }
+
+    fun readTemplate(): String? {
+        val templateUri = settings.templateUri ?: return null
+        val template = DocumentFile.fromSingleUri(context, Uri.parse(templateUri)) ?: return null
+        return context.contentResolver.openInputStream(template.uri)?.use { stream ->
+            String(stream.readBytes(), Charsets.UTF_8)
+        }
+    }
+
+    private fun writeDocument(document: DocumentFile, content: String): Boolean {
+        context.contentResolver.openOutputStream(document.uri, "wt")?.use { stream ->
+            stream.write(content.toByteArray(Charsets.UTF_8))
         } ?: return false
-        return writeToday(content)
+        return true
     }
 
     /** The hour of the day (0-23) after which the next day's note rolls over. */
@@ -88,10 +101,16 @@ class ObsidianVault(private val context: Context) {
 
     fun todayFileName(): String = ObsidianNotes.dailyNoteName(settings.filenameFormat, LocalDate.now())
 
-    private fun todayDocument(): DocumentFile? {
+    private fun vaultTree(): DocumentFile? {
         val vaultUri = settings.vaultUri ?: return null
-        val tree = DocumentFile.fromTreeUri(context, Uri.parse(vaultUri))
-        val today = tree?.findFile(todayFileName()) ?: return null
-        return if (today.isFile) today else null
+        return DocumentFile.fromTreeUri(context, Uri.parse(vaultUri))
     }
+
+    private fun findFile(name: String): DocumentFile? {
+        val tree = vaultTree() ?: return null
+        val file = tree.findFile(name) ?: return null
+        return if (file.isFile) file else null
+    }
+
+    private fun todayDocument(): DocumentFile? = findFile(todayFileName())
 }
