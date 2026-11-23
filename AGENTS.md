@@ -3,3 +3,4 @@
 - Changes: Explain the proposed approach and wait for approval before editing files.
 - tdd always; functional core, imperative shell
 - backward compatibility is not required; unless it will break existing apps 
+- Don't clear gradle or other cache without my permission for any reason
