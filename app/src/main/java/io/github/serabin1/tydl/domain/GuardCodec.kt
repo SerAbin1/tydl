@@ -32,7 +32,7 @@ object GuardCodec {
             state.completedSession?.endsAt?.toString() ?: NONE,
             state.completedSession?.requestedMinutes?.toString() ?: NONE,
             state.completedSession?.extensionsUsed?.toString() ?: NONE,
-            state.selectedTask ?: "",
+            state.selectedTask?.let { URLEncoder.encode(it, Charsets.UTF_8.name()) } ?: "",
         ).joinToString(SEPARATOR)
     }
 
@@ -48,7 +48,7 @@ object GuardCodec {
                 extensionsTodayCount = parts[7].toInt(),
                 extensionsTodayMinutes = parts[8].toInt(),
                 extensionsDayStart = parts[9].toLong(),
-                selectedTask = parts[15].ifBlank { null },
+                selectedTask = parts[15].ifBlank { null }?.let { URLDecoder.decode(it, Charsets.UTF_8.name()) },
             )
         } catch (e: Exception) {
             GuardState()

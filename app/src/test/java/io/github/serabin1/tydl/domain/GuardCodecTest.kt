@@ -38,6 +38,16 @@ class GuardCodecTest {
     }
 
     @Test
+    fun `selected task with pipe round-trips`() {
+        val state = GuardState(
+            session = Session.start("BullMQ", 5, t0),
+            selectedTask = "[[System_Design/LLD/BullMQ|BullMQ]]",
+        )
+
+        assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
+    }
+
+    @Test
     fun `reasons with separators, newlines and unicode survive`() {
         val reason = "a|b\nc — café 🚀 100%"
         val state = GuardState(session = Session.start(reason, 5, t0))

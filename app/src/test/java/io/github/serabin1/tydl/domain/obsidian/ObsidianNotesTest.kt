@@ -182,6 +182,87 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `hard gate shows routine only while routine pending`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+            - [ ] Routine 2
+
+            ---
+
+            - [ ] Backlog 1
+
+            ---
+
+            -
+        """.trimIndent())
+        assertEquals(listOf("Routine 1", "Routine 2"), ObsidianNotes.suggestions(note, TaskGate.HARD).map { it.text })
+    }
+
+    @Test
+    fun `soft gate shows backlog only`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+            - [ ] Backlog 4
+
+            ---
+
+            -
+        """.trimIndent())
+        assertEquals(listOf("Backlog 1", "Backlog 2", "Backlog 3"), ObsidianNotes.suggestions(note, TaskGate.SOFT).map { it.text })
+    }
+
+    @Test
+    fun `mixed gate shows one routine and two backlog`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+            - [ ] Routine 2
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+
+            ---
+
+            -
+        """.trimIndent())
+        assertEquals(listOf("Routine 1", "Backlog 1", "Backlog 2"), ObsidianNotes.suggestions(note, TaskGate.MIXED).map { it.text })
+    }
+
+    @Test
+    fun `mixed gate fills from backlog when routine empty`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [x] Routine 1
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+
+            ---
+
+            -
+        """.trimIndent())
+        assertEquals(listOf("Backlog 1", "Backlog 2", "Backlog 3"), ObsidianNotes.suggestions(note, TaskGate.MIXED).map { it.text })
+    }
+
+    @Test
     fun `carry over tasks are the unchecked backlog tasks`() {
         val content = """
             Today, 22-11-2026
@@ -261,5 +342,43 @@ class ObsidianNotesTest {
     @Test
     fun `task removal of an unknown task is a no-op`() {
         assertEquals(noteContent, ObsidianNotes.withTaskRemoved(noteContent, "Nope"))
+    }
+
+    @Test
+    fun `insert into carry over puts tasks between first and second separator`() {
+        val content = """
+            Today, 22-11-2026
+
+            - [ ] Write the design doc
+
+            ---
+
+            -
+
+            ---
+
+            -
+            > [!quote] Consistency Before Greatness
+            """.trimIndent()
+        val carried = listOf(ObsidianTask("Buy groceries", checked = false))
+
+        val updated = ObsidianNotes.insertIntoCarryOver(content, carried)
+
+        val note = ObsidianNotes.parse(updated, "22-11-2026.md")
+        assertEquals(listOf("Buy groceries"), note.carryOverTasks.map { it.text })
+        assertEquals(listOf("Write the design doc"), note.routineTasks.map { it.text })
+        assertNull(note.reflection)
+    }
+
+    @Test
+    fun `daily note filename uses month not minute`() {
+        val date = java.time.LocalDate.of(2026, 11, 23)
+        assertEquals("23-11-2026", ObsidianNotes.dailyNoteName("DD-MM-YYYY", date))
+    }
+
+    @Test
+    fun `daily note filename supports iso format`() {
+        val date = java.time.LocalDate.of(2026, 11, 23)
+        assertEquals("2026-11-23", ObsidianNotes.dailyNoteName("YYYY-MM-DD", date))
     }
 }

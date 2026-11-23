@@ -85,8 +85,7 @@ class ObsidianVault(private val context: Context) {
         return writeToday(ObsidianNotes.withReflection(content, note))
     }
 
-    fun todayFileName(): String =
-        LocalDate.now().format(DateTimeFormatter.ofPattern(settings.filenameFormat.lowercase()))
+    fun todayFileName(): String = ObsidianNotes.dailyNoteName(settings.filenameFormat, LocalDate.now())
 
     private fun todayDocument(): DocumentFile? {
         val vaultUri = settings.vaultUri ?: return null

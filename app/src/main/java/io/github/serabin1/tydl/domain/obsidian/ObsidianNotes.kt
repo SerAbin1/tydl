@@ -18,6 +18,9 @@ data class ObsidianTask(
  */
 enum class ObsidianBlock { ROUTINE, CARRY_OVER, REFLECTION }
 
+/** How the intent screen picks suggested tasks. */
+enum class TaskGate { HARD, SOFT, MIXED }
+
 /**
  * The slices of a daily note Tydl reads and writes: the routine tasks, the carried backlog
  * tasks, and the reflection. Pure: no Android, no filesystem.
@@ -40,6 +43,15 @@ data class ObsidianNote(
 object ObsidianNotes {
 
     const val MAX_SUGGESTIONS = 3
+
+    /** Formats a daily-note filename from a user-facing pattern (DD/MM/YYYY) using LocalDate. */
+    fun dailyNoteName(format: String, date: java.time.LocalDate): String {
+        val pattern = format
+            .replace("YYYY", "yyyy")
+            .replace("YY", "yy")
+            .replace("DD", "dd")
+        return date.format(java.time.format.DateTimeFormatter.ofPattern(pattern))
+    }
 
     private val taskRegex = Regex("""^\s*[-*]\s\[([ xX])\]\s*(.+)$""")
 
@@ -87,14 +99,21 @@ object ObsidianNotes {
         parse(content).carryOverTasks.filter { !it.checked }
 
     /**
-     * Up to [MAX_SUGGESTIONS] tasks to show on the intent screen. Routine tasks come first while
-     * any routine box is still unchecked; the backlog unlocks once the routine is done.
+     * Up to [MAX_SUGGESTIONS] tasks to show on the intent screen, shaped by [gate]:
+     * HARD = routine while pending else backlog, SOFT = backlog only, MIXED = 1 routine + 2 backlog.
      */
-    fun suggestions(note: ObsidianNote, limit: Int = MAX_SUGGESTIONS): List<ObsidianTask> {
+    fun suggestions(
+        note: ObsidianNote,
+        gate: TaskGate = TaskGate.HARD,
+        limit: Int = MAX_SUGGESTIONS,
+    ): List<ObsidianTask> {
         val routine = note.pendingRoutineTasks
         val backlog = note.carryOverTasks.filter { !it.checked }
-        val source = if (routine.isNotEmpty()) routine else backlog
-        return source.take(limit)
+        return when (gate) {
+            TaskGate.HARD -> if (routine.isNotEmpty()) routine.take(limit) else backlog.take(limit)
+            TaskGate.SOFT -> backlog.take(limit)
+            TaskGate.MIXED -> (routine.take(1) + backlog).take(limit)
+        }
     }
 
     /** Human-facing task text: wikilink alias, link text, or plain text. `[[Project]]: task` shows as "Project: task". */
@@ -122,10 +141,10 @@ object ObsidianNotes {
     /** Insert [tasks] into the CARRY-OVER slot, i.e. right after the first `---` anchor. */
     fun insertIntoCarryOver(content: String, tasks: List<ObsidianTask>): String {
         val lines = content.split("\n")
-        val second = separatorIndex(lines, 2)
-        if (second < 0) return content
+        val first = separatorIndex(lines, 1)
+        if (first < 0) return content
         val inserted = tasks.map { it.line(checked = false) }
-        return (lines.subList(0, second + 1) + inserted + lines.subList(second + 1, lines.size))
+        return (lines.subList(0, first + 1) + inserted + lines.subList(first + 1, lines.size))
             .joinToString("\n")
     }
 
