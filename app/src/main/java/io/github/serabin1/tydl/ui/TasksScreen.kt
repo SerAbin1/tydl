@@ -50,12 +50,6 @@ fun TasksScreen(
             letterSpacing = 6.sp,
             color = Tide,
         )
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = "Pick what this session is for.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = Mist,
-        )
         Spacer(Modifier.height(36.dp))
         tasks.forEach { task ->
             OutlinedButton(
