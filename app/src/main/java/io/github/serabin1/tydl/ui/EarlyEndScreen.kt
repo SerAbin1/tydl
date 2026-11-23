@@ -40,7 +40,7 @@ import io.github.serabin1.tydl.ui.theme.Tide
 fun EarlyEndScreen(
     session: Session,
     task: String? = null,
-    onStartAnother: () -> Unit,
+    onStartAnother: (String) -> Unit,
     onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
 ) {
@@ -52,6 +52,7 @@ fun EarlyEndScreen(
             task = task,
             onTaskFinished = onTaskFinished,
             onDone = onDone,
+            onStartAnother = onStartAnother,
         )
     } else {
         Column(
@@ -92,20 +93,12 @@ fun EarlyEndScreen(
             )
             Spacer(Modifier.height(24.dp))
             Button(
-                onClick = onStartAnother,
+                onClick = { mode = true },
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
                 modifier = Modifier.fillMaxWidth().height(58.dp),
             ) {
-                Text("Start another session", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = { mode = true },
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-            ) {
-                Text("I'm done", style = MaterialTheme.typography.titleSmall)
+                Text("I'm done", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(40.dp))
         }

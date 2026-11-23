@@ -29,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.serabin1.tydl.domain.DoneOutcome
@@ -44,6 +46,9 @@ fun DoneScreen(
     task: String? = null,
     onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
+    onStartAnother: (String) -> Unit = {},
+    showClose: Boolean = true,
+    showStartAnother: Boolean = true,
 ) {
     var askFinish by remember { mutableStateOf(task != null) }
     var noteText by remember { mutableStateOf("") }
@@ -79,16 +84,14 @@ fun DoneScreen(
                 color = Foam,
             )
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = if (askFinish) {
-                "Did you finish the task?"
-            } else {
-                "A line or two. Then we close."
-            },
-            style = MaterialTheme.typography.bodyLarge,
-            color = Mist,
-        )
+        if (askFinish) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Did you finish the task?",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Mist,
+            )
+        }
         Spacer(Modifier.height(36.dp))
         if (askFinish) {
             Button(
@@ -125,19 +128,33 @@ fun DoneScreen(
                 label = { Text("How it went") },
                 supportingText = { Text("Required.") },
                 shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(32.dp))
-            Button(
-                onClick = { note?.let(onDone) },
-                enabled = note != null,
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-            ) {
-                Text("Close", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (showClose) {
+                Button(
+                    onClick = { note?.let(onDone) },
+                    enabled = note != null,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                ) {
+                    Text("Close", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(32.dp))
+            if (showStartAnother) {
+                OutlinedButton(
+                    onClick = { note?.let(onStartAnother) },
+                    enabled = note != null,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                ) {
+                    Text("Start another session", style = MaterialTheme.typography.titleSmall, color = Tide)
+                }
+                Spacer(Modifier.height(32.dp))
+            }
         }
     }
 }

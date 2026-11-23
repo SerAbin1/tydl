@@ -145,7 +145,8 @@ class MainActivity : ComponentActivity() {
                             EarlyEndScreen(
                                 session = session,
                                 task = guardState.selectedTask,
-                                onStartAnother = {
+                                onStartAnother = { note ->
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     earlyEnd = false
@@ -209,6 +210,13 @@ class MainActivity : ComponentActivity() {
                                 onDone = { note ->
                                     lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
                                     GuardService.endAndLock(this)
+                                    fallback = null
+                                    refresh()
+                                },
+                                onStartAnother = { note ->
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
+                                    GuardService.end(this)
+                                    GuardService.simulateUnlock(this)
                                     fallback = null
                                     refresh()
                                 },

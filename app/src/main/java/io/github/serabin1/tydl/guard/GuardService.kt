@@ -459,6 +459,13 @@ class GuardService : Service() {
                             overlay.remove()
                             expiryOverlay = null
                         },
+                        onStartAnother = { note ->
+                            end(this@GuardService)
+                            simulateUnlock(this@GuardService)
+                            appendReflection(note)
+                            overlay.remove()
+                            expiryOverlay = null
+                        },
                         onExtend = { minutes ->
                             extend(this@GuardService, minutes)
                             overlay.remove()
@@ -494,6 +501,7 @@ class GuardService : Service() {
                             overlay.remove()
                             doneOverlay = null
                         },
+                        showStartAnother = false,
                     )
                 }
             }

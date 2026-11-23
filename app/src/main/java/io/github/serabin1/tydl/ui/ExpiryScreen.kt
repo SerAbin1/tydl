@@ -47,6 +47,7 @@ fun ExpiryScreen(
     task: String? = null,
     onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
+    onStartAnother: (String) -> Unit = {},
     onExtend: (Int) -> Unit,
 ) {
     var mode by remember { mutableStateOf(ExpiryMode.Choice) }
@@ -68,6 +69,7 @@ fun ExpiryScreen(
             task = task,
             onTaskFinished = onTaskFinished,
             onDone = onDone,
+            onStartAnother = onStartAnother,
         )
 
         ExpiryMode.Choice -> Column(
