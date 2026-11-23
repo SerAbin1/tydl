@@ -14,6 +14,9 @@ import android.text.format.DateFormat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import io.github.serabin1.tydl.data.ObsidianSettings
+import io.github.serabin1.tydl.data.ObsidianSettingsStore
+import io.github.serabin1.tydl.data.ObsidianVault
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -47,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import io.github.serabin1.tydl.data.GuardStore
-import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.guard.GuardService
 import io.github.serabin1.tydl.guard.LockAdminReceiver
@@ -70,12 +72,22 @@ class MainActivity : ComponentActivity() {
     private var notificationsGranted by mutableStateOf(false)
     private var deviceAdminGranted by mutableStateOf(false)
     private var batteryExempt by mutableStateOf(false)
+    private val settingsStore = ObsidianSettingsStore(this)
     private var fallback by mutableStateOf<String?>(null)
     private var earlyEnd by mutableStateOf(false)
     private lateinit var obsidianVault: ObsidianVault
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
+
+    private val vaultPickerLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        if (treeUri != null) {
+            settingsStore.save(io.github.serabin1.tydl.data.ObsidianSettings(vaultUri = treeUri.toString()))
+            refresh()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -487,6 +499,24 @@ private fun MainScreen(
                 onClick = onAllowBattery,
             )
             Spacer(Modifier.height(10.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        ) {
+            OutlinedButton(
+                onClick = { /* Vault picker - opens SAF */ },
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) {
+                Text("Vault", color = Tide)
+            }
+            OutlinedButton(
+                onClick = { /* Template picker */ },
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) {
+                Text("Template", color = Tide)
+            }
         }
         OutlinedButton(
             onClick = onTestUnlock,
