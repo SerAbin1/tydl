@@ -46,6 +46,7 @@ import io.github.serabin1.tydl.ui.TasksScreen
 import io.github.serabin1.tydl.ui.theme.TydlTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -314,16 +315,18 @@ class GuardService : Service() {
 
     private fun showPrompt() {
         whenUnlocked("prompt") {
-            suggestedTasks = loadSuggestedTasks()
-            if (suggestedTasks.isNotEmpty() && pendingTask == null) {
-                showTasks(suggestedTasks) { task ->
-                    suggestedTasks = emptyList()
-                    pendingTask = task
-                    showPrompt()
+            scope.launch {
+                suggestedTasks = withContext(Dispatchers.IO) { loadSuggestedTasks() }
+                if (suggestedTasks.isNotEmpty() && pendingTask == null) {
+                    showTasks(suggestedTasks) { task ->
+                        suggestedTasks = emptyList()
+                        pendingTask = task
+                        showPrompt()
+                    }
+                    return@launch
                 }
-                return@whenUnlocked
+                showPromptForm()
             }
-            showPromptForm()
         }
     }
 
@@ -389,9 +392,10 @@ class GuardService : Service() {
                     },
                     onSomethingElse = {
                         suggestedTasks = emptyList()
+                        pendingTask = null
                         overlay.remove()
                         tasksOverlay = null
-                        showPrompt()
+                        showPromptForm()
                     },
                 )
             }
