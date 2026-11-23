@@ -34,8 +34,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -72,19 +74,40 @@ class MainActivity : ComponentActivity() {
     private var notificationsGranted by mutableStateOf(false)
     private var deviceAdminGranted by mutableStateOf(false)
     private var batteryExempt by mutableStateOf(false)
-    private val settingsStore = ObsidianSettingsStore(this)
     private var fallback by mutableStateOf<String?>(null)
     private var earlyEnd by mutableStateOf(false)
     private lateinit var obsidianVault: ObsidianVault
+    private lateinit var settingsStore: ObsidianSettingsStore
+    private var obsidianSettings by mutableStateOf(ObsidianSettings.defaults())
+    private var showSettings by mutableStateOf(false)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
 
     private val vaultPickerLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+        ActivityResultContracts.OpenDocumentTree(),
     ) { treeUri ->
         if (treeUri != null) {
-            settingsStore.save(io.github.serabin1.tydl.data.ObsidianSettings(vaultUri = treeUri.toString()))
+            contentResolver.takePersistableUriPermission(
+                treeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            obsidianSettings = obsidianSettings.copy(vaultUri = treeUri.toString())
+            settingsStore.save(obsidianSettings)
+            refresh()
+        }
+    }
+
+    private val templatePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+            obsidianSettings = obsidianSettings.copy(templateUri = uri.toString())
+            settingsStore.save(obsidianSettings)
             refresh()
         }
     }
@@ -94,10 +117,23 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         GuardService.start(this)
         obsidianVault = ObsidianVault(this)
+        settingsStore = ObsidianSettingsStore(this)
+        obsidianSettings = settingsStore.load()
         fallback = fallbackFrom(intent)
         setContent {
             TydlTheme {
                 when {
+                    showSettings -> SettingsScreen(
+                        settings = obsidianSettings,
+                        onBack = { showSettings = false },
+                        onPickVault = { vaultPickerLauncher.launch(null) },
+                        onPickTemplate = { templatePickerLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
+                        onSettingsChange = { s ->
+                            obsidianSettings = s
+                            settingsStore.save(s)
+                        },
+                    )
+
                     earlyEnd -> {
                         val session = guardState.session
                         if (session != null) {
@@ -228,6 +264,7 @@ class MainActivity : ComponentActivity() {
             onAllowBattery = ::requestBatteryExemption,
             onTestUnlock = { GuardService.simulateUnlock(this) },
             onEndEarly = { earlyEnd = true },
+            onOpenSettings = { showSettings = true },
         )
     }
 
@@ -240,6 +277,7 @@ class MainActivity : ComponentActivity() {
         val store = GuardStore(this)
         guardState = store.load()
         lastUnlockAt = store.loadLastUnlock()
+        obsidianSettings = settingsStore.load()
         overlayGranted = Settings.canDrawOverlays(this)
         notificationsGranted = Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(
@@ -315,6 +353,7 @@ private fun MainScreen(
     onAllowBattery: () -> Unit,
     onTestUnlock: () -> Unit,
     onEndEarly: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val now = System.currentTimeMillis()
     val context = LocalContext.current
@@ -354,18 +393,23 @@ private fun MainScreen(
             .padding(horizontal = 24.dp),
     ) {
         Spacer(Modifier.height(40.dp))
-        Text(
-            text = "TYDL",
-            style = MaterialTheme.typography.labelLarge,
-            letterSpacing = 6.sp,
-            color = Tide,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Time Your Digital Life.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Mist,
-        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text(
+                    text = "TYDL",
+                    style = MaterialTheme.typography.labelLarge,
+                    letterSpacing = 6.sp,
+                    color = Tide,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Time Your Digital Life.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Mist,
+                )
+            }
+            TextButton(onClick = onOpenSettings) { Text("⚙", color = Tide, fontSize = 20.sp) }
+        }
         Spacer(Modifier.height(28.dp))
 
         Surface(
@@ -501,23 +545,6 @@ private fun MainScreen(
             Spacer(Modifier.height(10.dp))
         }
         Spacer(Modifier.height(8.dp))
-        Row(
-            horizontalArrangement = Arrangement.End,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-        ) {
-            OutlinedButton(
-                onClick = { /* Vault picker - opens SAF */ },
-                modifier = Modifier.padding(horizontal = 4.dp),
-            ) {
-                Text("Vault", color = Tide)
-            }
-            OutlinedButton(
-                onClick = { /* Template picker */ },
-                modifier = Modifier.padding(horizontal = 4.dp),
-            ) {
-                Text("Template", color = Tide)
-            }
-        }
         OutlinedButton(
             onClick = onTestUnlock,
             shape = RoundedCornerShape(14.dp),
@@ -532,6 +559,92 @@ private fun MainScreen(
             style = MaterialTheme.typography.bodySmall,
             color = Mist,
         )
+        Spacer(Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    settings: ObsidianSettings,
+    onBack: () -> Unit,
+    onPickVault: () -> Unit,
+    onPickTemplate: () -> Unit,
+    onSettingsChange: (ObsidianSettings) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp),
+    ) {
+        Spacer(Modifier.height(24.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("SETTINGS", style = MaterialTheme.typography.labelLarge, letterSpacing = 4.sp, color = Tide)
+            TextButton(onClick = onBack) { Text("Back", color = Tide) }
+        }
+        Spacer(Modifier.height(24.dp))
+
+        Text("OBSIDIAN", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
+        Spacer(Modifier.height(8.dp))
+        SetupCard(
+            title = "Daily notes folder",
+            body = settings.vaultUri ?: "Not selected",
+            action = "Choose",
+            onClick = onPickVault,
+        )
+        Spacer(Modifier.height(10.dp))
+        SetupCard(
+            title = "Template file",
+            body = settings.templateUri ?: "Not selected",
+            action = "Choose",
+            onClick = onPickTemplate,
+        )
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = settings.filenameFormat,
+            onValueChange = { onSettingsChange(settings.copy(filenameFormat = it.ifBlank { ObsidianSettings.DEFAULT_FILENAME_FORMAT })) },
+            label = { Text("Daily note filename format") },
+            supportingText = { Text("Example: DD-MM-YYYY") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = settings.rolloverHour.toString(),
+            onValueChange = { v ->
+                val h = v.filter(Char::isDigit).toIntOrNull()?.coerceIn(0, 23) ?: settings.rolloverHour
+                onSettingsChange(settings.copy(rolloverHour = h))
+            },
+            label = { Text("Rollover hour (0-23)") },
+            supportingText = { Text("New day starts at this hour, e.g. 4 = 4 AM") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+
+        Text("TASK GATE", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
+        Spacer(Modifier.height(8.dp))
+        io.github.serabin1.tydl.domain.obsidian.TaskGate.entries.forEach { gate ->
+            val selected = settings.taskGate == gate
+            OutlinedButton(
+                onClick = { onSettingsChange(settings.copy(taskGate = gate)) },
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, if (selected) Tide else Edge),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            ) {
+                val label = when (gate) {
+                    io.github.serabin1.tydl.domain.obsidian.TaskGate.HARD -> "Hard — routine mandatory"
+                    io.github.serabin1.tydl.domain.obsidian.TaskGate.SOFT -> "Soft — backlog only"
+                    io.github.serabin1.tydl.domain.obsidian.TaskGate.MIXED -> "Mixed — 1 routine, 2 backlog"
+                }
+                Text(label, color = if (selected) Tide else Mist)
+            }
+        }
         Spacer(Modifier.height(40.dp))
     }
 }
