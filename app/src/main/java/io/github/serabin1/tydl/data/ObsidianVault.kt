@@ -36,6 +36,7 @@ class ObsidianVault(private val context: Context) {
     }
 
     fun createTodayFromTemplate(): Boolean {
+        if (todayDocument() != null) return true
         val templateUri = settings.templateUri ?: return false
         val template = DocumentFile.fromSingleUri(context, Uri.parse(templateUri)) ?: return false
         val content = template.uri?.let { uri ->
@@ -44,6 +45,25 @@ class ObsidianVault(private val context: Context) {
             }
         } ?: return false
         return writeToday(content)
+    }
+
+    /** The hour of the day (0-23) after which the next day's note rolls over. */
+    fun rolloverHour(): Int = settings.rolloverHour
+
+    /** The content of the most recent note strictly before [before] (by daily-note filename). */
+    fun latestNoteBefore(before: String): String? {
+        val vaultUri = settings.vaultUri ?: return null
+        val tree = DocumentFile.fromTreeUri(context, Uri.parse(vaultUri)) ?: return null
+        val files: List<DocumentFile> = tree.listFiles()?.toList() ?: return null
+        val latest = files
+            .filter { !it.isDirectory && (it.name ?: "") < before }
+            .sortedWith(compareByDescending { it.name ?: "" })
+            .firstOrNull()
+            ?: return null
+        val uri = latest.uri
+        return context.contentResolver.openInputStream(uri)?.use { stream ->
+            String(stream.readBytes(), Charsets.UTF_8)
+        }
     }
 
     /**
