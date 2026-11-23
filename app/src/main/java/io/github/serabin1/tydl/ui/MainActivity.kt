@@ -1,19 +1,24 @@
 package io.github.serabin1.tydl.ui
 
 import android.Manifest
+import android.app.StatusBarManager
 import android.app.admin.DevicePolicyManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.format.DateFormat
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import io.github.serabin1.tydl.R
 import io.github.serabin1.tydl.data.ObsidianSettings
 import io.github.serabin1.tydl.data.ObsidianSettingsStore
 import io.github.serabin1.tydl.data.ObsidianVault
@@ -60,6 +65,7 @@ import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.guard.GuardService
 import io.github.serabin1.tydl.guard.LockAdminReceiver
+import io.github.serabin1.tydl.tile.DailyNoteTileService
 import io.github.serabin1.tydl.ui.theme.Edge
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Mist
@@ -133,6 +139,7 @@ class MainActivity : ComponentActivity() {
                         onBack = { showSettings = false },
                         onPickVault = { vaultPickerLauncher.launch(null) },
                         onPickTemplate = { templatePickerLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
+                        onAddTile = ::requestAddDailyNoteTile,
                         onSettingsChange = { s ->
                             obsidianSettings = s
                             settingsStore.save(s)
@@ -252,6 +259,26 @@ class MainActivity : ComponentActivity() {
         intent?.getBooleanExtra(GuardService.EXTRA_SHOW_EXPIRY, false) == true ->
             GuardService.EXTRA_SHOW_EXPIRY
         else -> null
+    }
+
+    /** Android 13+ system prompt; the user must approve, and the call needs a foreground app. */
+    private fun requestAddDailyNoteTile() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val manager = getSystemService(StatusBarManager::class.java) ?: return
+        manager.requestAddTileService(
+            ComponentName(this, DailyNoteTileService::class.java),
+            getString(R.string.tile_daily_note_label),
+            Icon.createWithResource(this, R.drawable.ic_tile_daily_note),
+            mainExecutor,
+        ) { result ->
+            val message = when (result) {
+                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Daily note tile added"
+                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Daily note tile is already added"
+                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "Daily note tile not added"
+                else -> "Could not add the daily note tile"
+            }
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     @Composable
@@ -593,6 +620,7 @@ private fun SettingsScreen(
     onBack: () -> Unit,
     onPickVault: () -> Unit,
     onPickTemplate: () -> Unit,
+    onAddTile: () -> Unit,
     onSettingsChange: (ObsidianSettings) -> Unit,
 ) {
     Column(
@@ -650,6 +678,16 @@ private fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            SetupCard(
+                title = "Daily note tile",
+                body = "Open today's note from Quick Settings, using Tydl's rollover hour.",
+                action = "Add tile",
+                onClick = onAddTile,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
 
         Text("TASK GATE", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
         Spacer(Modifier.height(8.dp))

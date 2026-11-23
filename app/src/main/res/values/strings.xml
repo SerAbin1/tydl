@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Tydl</string>
+    <string name="tile_daily_note_label">Tydl note</string>
 </resources>

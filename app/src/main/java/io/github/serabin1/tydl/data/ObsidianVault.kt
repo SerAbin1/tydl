@@ -37,19 +37,21 @@ class ObsidianVault(private val context: Context) {
         return writeDocument(document, content)
     }
 
-    fun createTodayFromTemplate(): Boolean {
-        val expected = todayFileName()
-        if (findFile(expected) != null) return true
+    fun createTodayFromTemplate(): Boolean = createFromTemplate(todayFileName())
+
+    /** Ensures [name] exists with the template contents. Idempotent: an existing file is untouched. */
+    fun createFromTemplate(name: String): Boolean {
+        if (findFile(name) != null) return true
         val templateContent = readTemplate() ?: return false
         val tree = vaultTree() ?: return false
-        val created = tree.createFile("text/markdown", expected) ?: return false
-        if (created.name != expected) {
-            android.util.Log.w("Tydl", "createTodayFromTemplate: SAF renamed $expected to ${created.name}, deleting stray")
+        val created = tree.createFile("text/markdown", name) ?: return false
+        if (created.name != name) {
+            android.util.Log.w("Tydl", "createFromTemplate: SAF renamed $name to ${created.name}, deleting stray")
             created.delete()
-            return findFile(expected) != null
+            return findFile(name) != null
         }
         val written = writeDocument(created, templateContent)
-        android.util.Log.i("Tydl", "createTodayFromTemplate: created=$expected written=$written")
+        android.util.Log.i("Tydl", "createFromTemplate: created=$name written=$written")
         return written
     }
 
@@ -123,11 +125,13 @@ class ObsidianVault(private val context: Context) {
         return writeToday(ObsidianNotes.withReflection(content, note))
     }
 
-    fun todayFileName(now: java.time.LocalDateTime = java.time.LocalDateTime.now()): String =
-        ObsidianNotes.dailyNoteName(
-            settings.filenameFormat,
-            ObsidianNotes.effectiveDate(now, settings.rolloverHour),
+    fun todayFileName(now: java.time.LocalDateTime = java.time.LocalDateTime.now()): String {
+        val current = settings
+        return ObsidianNotes.dailyNoteName(
+            current.filenameFormat,
+            ObsidianNotes.effectiveDate(now, current.rolloverHour),
         )
+    }
 
     private fun vaultTree(): DocumentFile? {
         val vaultUri = settings.vaultUri ?: return null
