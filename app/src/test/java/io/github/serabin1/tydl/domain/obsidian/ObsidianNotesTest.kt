@@ -435,6 +435,23 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `template quote extracts first quote callout`() {
+        val content = """
+            Today
+
+            ---
+
+            -
+
+            ---
+
+            -
+            > [!quote] Consistency Before Greatness
+        """.trimIndent()
+        assertEquals("Consistency Before Greatness", ObsidianNotes.templateQuote(content))
+    }
+
+    @Test
     fun `rollover plan is null when today carry over is not empty`() {
         val today = """
             Today

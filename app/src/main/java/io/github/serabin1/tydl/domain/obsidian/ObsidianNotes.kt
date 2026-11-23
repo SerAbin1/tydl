@@ -159,6 +159,15 @@ object ObsidianNotes {
         return task.text
     }
 
+    /** Extracts first quote callout text from template content, e.g. `> [!quote] ...` */
+    fun templateQuote(content: String): String? =
+        content.lineSequence()
+            .map { it.trim() }
+            .firstNotNullOfOrNull { line ->
+                Regex("""^>\s*\[!quote\]\s*(.+)$""", RegexOption.IGNORE_CASE)
+                    .find(line)?.groupValues?.get(1)?.trim()?.ifBlank { null }
+            }
+
     /** Insert [tasks] into the CARRY-OVER slot, i.e. right after the first `---` anchor. */
     fun insertIntoCarryOver(content: String, tasks: List<ObsidianTask>): String {
         val lines = content.split("\n")
