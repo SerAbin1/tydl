@@ -39,6 +39,7 @@ fun ExtensionScreen(
     session: Session,
     extensionsTodayCount: Int,
     extensionsTodayMinutes: Int,
+    quote: String = "Consistency Before Greatness",
     onExtend: (Int) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -54,7 +55,7 @@ fun ExtensionScreen(
     ) {
         Spacer(Modifier.height(56.dp))
         Text(
-            text = "CONSISTENCY BEFORE GREATNESS",
+            text = quote.uppercase(),
             style = MaterialTheme.typography.labelLarge,
             letterSpacing = 6.sp,
             color = Tide,

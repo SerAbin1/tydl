@@ -420,6 +420,7 @@ class GuardService : Service() {
         } else {
             hideExpiry()
             val task = state.selectedTask
+            val quote = vault.readTemplate()?.let { ObsidianNotes.templateQuote(it) } ?: "Consistency Before Greatness"
             expiryOverlay = showOverlay { overlay ->
                 TydlTheme {
                     ExpiryScreen(
@@ -427,6 +428,7 @@ class GuardService : Service() {
                         now = now(),
                         extensionsTodayCount = state.extensionsTodayCount,
                         extensionsTodayMinutes = state.extensionsTodayMinutes,
+                        quote = quote,
                         task = task,
                         onTaskFinished = { completeTask() },
                         onDone = { note ->

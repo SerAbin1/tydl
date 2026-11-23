@@ -39,6 +39,7 @@ fun ExpiryScreen(
     now: Long,
     extensionsTodayCount: Int,
     extensionsTodayMinutes: Int,
+    quote: String = "Consistency Before Greatness",
     task: String? = null,
     onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
@@ -51,6 +52,7 @@ fun ExpiryScreen(
             session = session,
             extensionsTodayCount = extensionsTodayCount,
             extensionsTodayMinutes = extensionsTodayMinutes,
+            quote = quote,
             onExtend = { minutes ->
                 onExtend(minutes)
             },
