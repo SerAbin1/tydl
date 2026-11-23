@@ -79,7 +79,7 @@ fun EarlyEndScreen(
             ) {
                 Text(
                     text = "\u201C${session.reason}\u201D",
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Foam,
                 )

@@ -74,7 +74,7 @@ fun DoneScreen(
         ) {
             Text(
                 text = session?.let { "\u201C${it.reason}\u201D" } ?: "Session ended.",
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = Foam,
             )

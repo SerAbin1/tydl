@@ -72,7 +72,7 @@ fun PromptScreen(
         Spacer(Modifier.height(20.dp))
         Text(
             text = "State your reason.",
-            style = MaterialTheme.typography.displaySmall,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = Foam,
         )
