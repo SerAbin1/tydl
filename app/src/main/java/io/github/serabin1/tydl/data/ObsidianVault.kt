@@ -38,11 +38,19 @@ class ObsidianVault(private val context: Context) {
     }
 
     fun createTodayFromTemplate(): Boolean {
-        if (todayDocument() != null) return true
+        val expected = todayFileName()
+        if (findFile(expected) != null) return true
         val templateContent = readTemplate() ?: return false
         val tree = vaultTree() ?: return false
-        val created = tree.createFile("text/markdown", todayFileName()) ?: return false
-        return writeDocument(created, templateContent)
+        val created = tree.createFile("text/markdown", expected) ?: return false
+        if (created.name != expected) {
+            android.util.Log.w("Tydl", "createTodayFromTemplate: SAF renamed $expected to ${created.name}, deleting stray")
+            created.delete()
+            return findFile(expected) != null
+        }
+        val written = writeDocument(created, templateContent)
+        android.util.Log.i("Tydl", "createTodayFromTemplate: created=$expected written=$written")
+        return written
     }
 
     fun readTemplate(): String? {

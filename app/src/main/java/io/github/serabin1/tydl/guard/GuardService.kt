@@ -354,13 +354,25 @@ class GuardService : Service() {
     }
 
     private fun loadSuggestedTasks(): List<ObsidianTask> {
-        if (!vault.isConfigured()) return emptyList()
-        if (!vault.hasToday()) return emptyList()
-        val content = vault.readToday() ?: return emptyList()
-        return ObsidianNotes.suggestions(
-            ObsidianNotes.parse(content, vault.todayFileName()),
+        if (!vault.isConfigured()) {
+            Log.i(TAG, "tasks: vault not configured")
+            return emptyList()
+        }
+        val today = vault.todayFileName()
+        if (!vault.hasToday()) {
+            Log.i(TAG, "tasks: no note for $today")
+            return emptyList()
+        }
+        val content = vault.readToday() ?: run {
+            Log.w(TAG, "tasks: failed to read $today")
+            return emptyList()
+        }
+        val suggestions = ObsidianNotes.suggestions(
+            ObsidianNotes.parse(content, today),
             vault.taskGate(),
         )
+        Log.i(TAG, "tasks: ${suggestions.size} suggestions from $today gate=${vault.taskGate()}")
+        return suggestions
     }
 
     private fun showTasks(tasks: List<ObsidianTask>, onTask: (ObsidianTask) -> Unit) {
@@ -550,19 +562,48 @@ class GuardService : Service() {
     private fun performRollover(): Boolean {
         if (!vault.isConfigured()) return false
         val todayName = vault.todayFileName()
-        if (!vault.hasToday() && !vault.createTodayFromTemplate()) return false
-        val todayContent = vault.readToday() ?: return false
+        if (!vault.hasToday()) {
+            Log.i(TAG, "rollover: creating $todayName from template")
+            if (!vault.createTodayFromTemplate()) {
+                Log.w(TAG, "rollover: failed to create $todayName")
+                return false
+            }
+        }
+        val todayContent = vault.readToday() ?: run {
+            Log.w(TAG, "rollover: cannot read $todayName")
+            return false
+        }
         val previousName = ObsidianNotes.latestEarlierDailyNote(
             vault.listDailyNoteNames(),
             todayName,
             vault.filenameFormat(),
-        ) ?: run { return true }
-        val previousContent = vault.readNote(previousName) ?: return true
-        val plan = ObsidianNotes.planRollover(todayContent, previousContent) ?: return true
-        if (!vault.writeToday(plan.updatedToday)) return false
+        ) ?: run {
+            Log.i(TAG, "rollover: no earlier daily note before $todayName")
+            return true
+        }
+        val previousContent = vault.readNote(previousName) ?: run {
+            Log.w(TAG, "rollover: cannot read previous $previousName")
+            return true
+        }
+        val plan = ObsidianNotes.planRollover(todayContent, previousContent) ?: run {
+            Log.i(TAG, "rollover: nothing to carry from $previousName to $todayName")
+            return true
+        }
+        Log.i(TAG, "rollover: carrying ${plan.carriedTasks.size} tasks from $previousName to $todayName")
+        if (!vault.writeToday(plan.updatedToday)) {
+            Log.w(TAG, "rollover: failed to write $todayName")
+            return false
+        }
         val verify = vault.readToday() ?: return false
-        if (ObsidianNotes.parse(verify).carryOverTasks.size < plan.carriedTasks.size) return false
-        if (!vault.writeNote(previousName, plan.updatedPrevious)) return false
+        if (ObsidianNotes.parse(verify).carryOverTasks.size < plan.carriedTasks.size) {
+            Log.w(TAG, "rollover: verify failed for $todayName")
+            return false
+        }
+        if (!vault.writeNote(previousName, plan.updatedPrevious)) {
+            Log.w(TAG, "rollover: failed to update previous $previousName")
+            return false
+        }
+        Log.i(TAG, "rollover: complete $previousName -> $todayName")
         return true
     }
 
