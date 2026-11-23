@@ -31,7 +31,7 @@ class DailyNoteTileService : TileService() {
         qsTile?.let { tile ->
             tile.label = getString(R.string.tile_daily_note_label)
             tile.contentDescription = tile.label
-            tile.state = Tile.STATE_ACTIVE
+            tile.state = Tile.STATE_INACTIVE
             tile.updateTile()
         }
     }
