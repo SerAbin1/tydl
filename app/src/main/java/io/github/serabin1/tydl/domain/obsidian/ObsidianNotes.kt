@@ -46,7 +46,7 @@ object ObsidianNotes {
 
     /** Formats a daily-note filename from a user-facing pattern (DD/MM/YYYY) using LocalDate. */
     fun dailyNoteName(format: String, date: java.time.LocalDate): String =
-        date.format(dateFormatter(format))
+        date.format(dateFormatter(format)) + ".md"
 
     /** Parses a daily-note filename into its date, or null when it doesn't match the format. */
     fun parseDailyNoteDate(name: String, format: String): java.time.LocalDate? {
@@ -159,14 +159,26 @@ object ObsidianNotes {
         return task.text
     }
 
-    /** Extracts first quote callout text from template content, e.g. `> [!quote] ...` */
-    fun templateQuote(content: String): String? =
-        content.lineSequence()
-            .map { it.trim() }
-            .firstNotNullOfOrNull { line ->
-                Regex("""^>\s*\[!quote\]\s*(.+)$""", RegexOption.IGNORE_CASE)
-                    .find(line)?.groupValues?.get(1)?.trim()?.ifBlank { null }
+    /** Extracts first quote callout text from template content, including multi-line callout bodies. */
+    fun templateQuote(content: String): String? {
+        val lines = content.lines()
+        for (i in lines.indices) {
+            val header = Regex("""^>\s*\[!quote\]\s*(.*)$""", RegexOption.IGNORE_CASE)
+                .find(lines[i].trim()) ?: continue
+            val parts = mutableListOf<String>()
+            header.groupValues[1].trim().takeIf { it.isNotEmpty() }?.let(parts::add)
+            var j = i + 1
+            while (j < lines.size) {
+                val body = Regex("""^>\s?(.*)$""").find(lines[j].trim())?.groupValues?.get(1)?.trim()
+                    ?: break
+                if (body.isNotEmpty() && !body.startsWith("[!")) parts.add(body)
+                j++
             }
+            val quote = parts.joinToString(" ").trim()
+            if (quote.isNotEmpty()) return quote
+        }
+        return null
+    }
 
     /** Insert [tasks] into the CARRY-OVER slot, i.e. right after the first `---` anchor. */
     fun insertIntoCarryOver(content: String, tasks: List<ObsidianTask>): String {

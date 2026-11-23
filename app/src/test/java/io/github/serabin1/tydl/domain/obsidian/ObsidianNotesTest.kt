@@ -371,15 +371,15 @@ class ObsidianNotesTest {
     }
 
     @Test
-    fun `daily note filename uses month not minute`() {
+    fun `daily note filename uses month not minute and appends md`() {
         val date = java.time.LocalDate.of(2026, 11, 23)
-        assertEquals("23-11-2026", ObsidianNotes.dailyNoteName("DD-MM-YYYY", date))
+        assertEquals("23-11-2026.md", ObsidianNotes.dailyNoteName("DD-MM-YYYY", date))
     }
 
     @Test
-    fun `daily note filename supports iso format`() {
+    fun `daily note filename supports iso format and appends md`() {
         val date = java.time.LocalDate.of(2026, 11, 23)
-        assertEquals("2026-11-23", ObsidianNotes.dailyNoteName("YYYY-MM-DD", date))
+        assertEquals("2026-11-23.md", ObsidianNotes.dailyNoteName("YYYY-MM-DD", date))
     }
 
     @Test
@@ -449,6 +449,28 @@ class ObsidianNotesTest {
             > [!quote] Consistency Before Greatness
         """.trimIndent()
         assertEquals("Consistency Before Greatness", ObsidianNotes.templateQuote(content))
+    }
+
+    @Test
+    fun `template quote extracts multi-line callout body`() {
+        val content = """
+            [On Writing as Thinking](https://example.com)
+
+            >[!quote]
+            > Consistency Before Greatness.
+            > Journey Before Destination.
+
+            - [ ] Task
+            ---
+            ---
+            -
+            >[!quote] Abraham Lincoln
+            >"Give me six hours to chop down a tree and I will spend the first four sharpening the axe."
+        """.trimIndent()
+        assertEquals(
+            "Consistency Before Greatness. Journey Before Destination.",
+            ObsidianNotes.templateQuote(content),
+        )
     }
 
     @Test
