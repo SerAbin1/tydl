@@ -48,6 +48,12 @@ object ObsidianNotes {
     fun dailyNoteName(format: String, date: java.time.LocalDate): String =
         date.format(dateFormatter(format)) + ".md"
 
+    /** Effective note date: before rollover hour, the day still belongs to the previous date. */
+    fun effectiveDate(now: java.time.LocalDateTime, rolloverHour: Int): java.time.LocalDate {
+        val date = now.toLocalDate()
+        return if (now.hour < rolloverHour.coerceIn(0, 23)) date.minusDays(1) else date
+    }
+
     /** Parses a daily-note filename into its date, or null when it doesn't match the format. */
     fun parseDailyNoteDate(name: String, format: String): java.time.LocalDate? {
         val base = name.removeSuffix(".md")

@@ -393,6 +393,20 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `effective date is previous day before rollover hour`() {
+        val now = java.time.LocalDateTime.of(2026, 11, 24, 3, 59)
+        assertEquals(java.time.LocalDate.of(2026, 11, 23), ObsidianNotes.effectiveDate(now, rolloverHour = 4))
+    }
+
+    @Test
+    fun `effective date is same day at and after rollover hour`() {
+        val at = java.time.LocalDateTime.of(2026, 11, 24, 4, 0)
+        val after = java.time.LocalDateTime.of(2026, 11, 24, 23, 30)
+        assertEquals(java.time.LocalDate.of(2026, 11, 24), ObsidianNotes.effectiveDate(at, rolloverHour = 4))
+        assertEquals(java.time.LocalDate.of(2026, 11, 24), ObsidianNotes.effectiveDate(after, rolloverHour = 4))
+    }
+
+    @Test
     fun `parse daily note date returns null for non-matching names`() {
         assertNull(ObsidianNotes.parseDailyNoteDate("README.md", "DD-MM-YYYY"))
         assertNull(ObsidianNotes.parseDailyNoteDate("template.md", "DD-MM-YYYY"))

@@ -123,7 +123,11 @@ class ObsidianVault(private val context: Context) {
         return writeToday(ObsidianNotes.withReflection(content, note))
     }
 
-    fun todayFileName(): String = ObsidianNotes.dailyNoteName(settings.filenameFormat, LocalDate.now())
+    fun todayFileName(now: java.time.LocalDateTime = java.time.LocalDateTime.now()): String =
+        ObsidianNotes.dailyNoteName(
+            settings.filenameFormat,
+            ObsidianNotes.effectiveDate(now, settings.rolloverHour),
+        )
 
     private fun vaultTree(): DocumentFile? {
         val vaultUri = settings.vaultUri ?: return null
