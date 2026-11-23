@@ -1,15 +1,20 @@
 package io.github.serabin1.tydl.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -51,6 +56,8 @@ fun ExtensionScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 28.dp),
     ) {
         Spacer(Modifier.height(56.dp))
@@ -61,12 +68,19 @@ fun ExtensionScreen(
             color = Tide,
         )
         Spacer(Modifier.height(20.dp))
-        Text(
-            text = "\u201C${session.reason}\u201D",
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.SemiBold,
-            color = Foam,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 160.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Text(
+                text = "\u201C${session.reason}\u201D",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Foam,
+            )
+        }
         Spacer(Modifier.height(14.dp))
         Text(
             text = "You asked for ${session.requestedMinutes} minutes. " +
@@ -92,7 +106,7 @@ fun ExtensionScreen(
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(24.dp))
         Button(
             onClick = { minutes?.let(onExtend) },
             enabled = minutes != null,

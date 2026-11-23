@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -60,7 +61,7 @@ fun TasksScreen(
             OutlinedButton(
                 onClick = { onTask(task) },
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
             ) {
                 Text(
                     text = ObsidianNotes.display(task),
@@ -71,7 +72,7 @@ fun TasksScreen(
             }
             Spacer(Modifier.height(8.dp))
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(16.dp))
         OutlinedButton(
             onClick = onSomethingElse,
             shape = RoundedCornerShape(14.dp),

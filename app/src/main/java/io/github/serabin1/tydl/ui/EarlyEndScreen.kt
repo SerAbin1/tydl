@@ -1,12 +1,14 @@
 package io.github.serabin1.tydl.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -69,19 +71,26 @@ fun EarlyEndScreen(
                 color = Tide,
             )
             Spacer(Modifier.height(20.dp))
-            Text(
-                text = "\u201C${session.reason}\u201D",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Foam,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 160.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = "\u201C${session.reason}\u201D",
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Foam,
+                )
+            }
             Spacer(Modifier.height(10.dp))
             Text(
                 text = "You still have ${session.remainingMinutes(System.currentTimeMillis())} min left.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Mist,
             )
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
             Button(
                 onClick = onStartAnother,
                 shape = RoundedCornerShape(18.dp),

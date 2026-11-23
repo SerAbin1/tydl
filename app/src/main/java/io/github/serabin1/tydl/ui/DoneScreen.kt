@@ -1,12 +1,14 @@
 package io.github.serabin1.tydl.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -64,12 +66,19 @@ fun DoneScreen(
             color = Tide,
         )
         Spacer(Modifier.height(20.dp))
-        Text(
-            text = session?.let { "\u201C${it.reason}\u201D" } ?: "Session ended.",
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.SemiBold,
-            color = Foam,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 160.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Text(
+                text = session?.let { "\u201C${it.reason}\u201D" } ?: "Session ended.",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Foam,
+            )
+        }
         Spacer(Modifier.height(10.dp))
         Text(
             text = if (askFinish) {
