@@ -381,4 +381,17 @@ class ObsidianNotesTest {
         val date = java.time.LocalDate.of(2026, 11, 23)
         assertEquals("2026-11-23", ObsidianNotes.dailyNoteName("YYYY-MM-DD", date))
     }
+
+    @Test
+    fun `parse daily note date returns null for non-matching names`() {
+        assertNull(ObsidianNotes.parseDailyNoteDate("README.md", "DD-MM-YYYY"))
+        assertNull(ObsidianNotes.parseDailyNoteDate("template.md", "DD-MM-YYYY"))
+    }
+
+    @Test
+    fun `latest earlier daily note is by date not lexical name`() {
+        val names = listOf("01-12-2026.md", "23-11-2026.md", "22-11-2026.md", "README.md")
+        val picked = ObsidianNotes.latestEarlierDailyNote(names, "23-11-2026.md", "DD-MM-YYYY")
+        assertEquals("22-11-2026.md", picked)
+    }
 }

@@ -45,12 +45,33 @@ object ObsidianNotes {
     const val MAX_SUGGESTIONS = 3
 
     /** Formats a daily-note filename from a user-facing pattern (DD/MM/YYYY) using LocalDate. */
-    fun dailyNoteName(format: String, date: java.time.LocalDate): String {
+    fun dailyNoteName(format: String, date: java.time.LocalDate): String =
+        date.format(dateFormatter(format))
+
+    /** Parses a daily-note filename into its date, or null when it doesn't match the format. */
+    fun parseDailyNoteDate(name: String, format: String): java.time.LocalDate? {
+        val base = name.removeSuffix(".md")
+        return runCatching {
+            java.time.LocalDate.parse(base, dateFormatter(format))
+        }.getOrNull()
+    }
+
+    /** Most recent earlier daily-note filename by actual date, ignoring non-matching files. */
+    fun latestEarlierDailyNote(names: List<String>, beforeName: String, format: String): String? {
+        val beforeDate = parseDailyNoteDate(beforeName, format) ?: return null
+        return names
+            .mapNotNull { n -> parseDailyNoteDate(n, format)?.let { n to it } }
+            .filter { (_, d) -> d.isBefore(beforeDate) }
+            .maxByOrNull { (_, d) -> d.toEpochDay() }
+            ?.first
+    }
+
+    private fun dateFormatter(format: String): java.time.format.DateTimeFormatter {
         val pattern = format
             .replace("YYYY", "yyyy")
             .replace("YY", "yy")
             .replace("DD", "dd")
-        return date.format(java.time.format.DateTimeFormatter.ofPattern(pattern))
+        return java.time.format.DateTimeFormatter.ofPattern(pattern)
     }
 
     private val taskRegex = Regex("""^\s*[-*]\s\[([ xX])\]\s*(.+)$""")
