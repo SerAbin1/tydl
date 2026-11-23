@@ -408,14 +408,20 @@ class GuardService : Service() {
     }
 
     /** Checks the picked task off in today's note when the user confirms the session is done. */
-    fun completeTask(): Boolean {
-        val taskText = state.selectedTask ?: return false
-        return vault?.completeTask(taskText) ?: false
+    fun completeTask() {
+        val taskText = state.selectedTask ?: return
+        scope.launch(Dispatchers.IO) {
+            val done = vault.completeTask(taskText)
+            Log.i(TAG, "completeTask done=$done task=$taskText")
+        }
     }
 
     /** Appends the how-it-went reflection to today's note, if the vault is configured. */
     fun appendReflection(note: String) {
-        vault?.appendReflection(note)
+        scope.launch(Dispatchers.IO) {
+            val done = vault.appendReflection(note)
+            Log.i(TAG, "appendReflection done=$done")
+        }
     }
 
     private fun showExpiry() = whenUnlocked("expiry") {

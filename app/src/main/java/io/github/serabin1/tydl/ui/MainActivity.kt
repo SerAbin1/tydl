@@ -51,6 +51,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.guard.GuardService
@@ -147,10 +150,11 @@ class MainActivity : ComponentActivity() {
                                     refresh()
                                 },
                                 onTaskFinished = {
-                                    guardState.selectedTask?.let { obsidianVault.completeTask(it) }
+                                    val task = guardState.selectedTask ?: return@EarlyEndScreen
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.completeTask(task) }
                                 },
                                 onDone = { note ->
-                                    obsidianVault.appendReflection(note)
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
                                     GuardService.endAndLock(this)
                                     earlyEnd = false
                                     refresh()
@@ -178,10 +182,11 @@ class MainActivity : ComponentActivity() {
                                 session = completed,
                                 task = guardState.selectedTask,
                                 onTaskFinished = {
-                                    guardState.selectedTask?.let { obsidianVault.completeTask(it) }
+                                    val task = guardState.selectedTask ?: return@DoneScreen
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.completeTask(task) }
                                 },
                                 onDone = { note ->
-                                    obsidianVault.appendReflection(note)
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
@@ -196,9 +201,11 @@ class MainActivity : ComponentActivity() {
                                 extensionsTodayMinutes = guardState.extensionsTodayMinutes,
                                 task = guardState.selectedTask,
                                 onTaskFinished = {
-                                    guardState.selectedTask?.let { obsidianVault.completeTask(it) }
+                                    val task = guardState.selectedTask ?: return@ExpiryScreen
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.completeTask(task) }
                                 },
-                                onDone = { _ ->
+                                onDone = { note ->
+                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
                                     GuardService.endAndLock(this)
                                     fallback = null
                                     refresh()
