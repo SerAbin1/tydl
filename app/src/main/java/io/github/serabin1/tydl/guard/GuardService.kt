@@ -405,6 +405,7 @@ class GuardService : Service() {
             )
         } else {
             hideExpiry()
+            val task = state.selectedTask
             expiryOverlay = showOverlay { overlay ->
                 TydlTheme {
                     ExpiryScreen(
@@ -412,8 +413,11 @@ class GuardService : Service() {
                         now = now(),
                         extensionsTodayCount = state.extensionsTodayCount,
                         extensionsTodayMinutes = state.extensionsTodayMinutes,
-                        onDone = { _ ->
+                        task = task,
+                        onTaskFinished = { completeTask() },
+                        onDone = { note ->
                             endAndLock(this@GuardService)
+                            appendReflection(note)
                             overlay.remove()
                             expiryOverlay = null
                         },
