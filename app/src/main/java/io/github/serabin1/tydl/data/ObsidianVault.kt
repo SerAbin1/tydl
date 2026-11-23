@@ -65,6 +65,8 @@ class ObsidianVault(private val context: Context) {
 
     fun filenameFormat(): String = settings.filenameFormat
 
+    fun taskGate(): io.github.serabin1.tydl.domain.obsidian.TaskGate = settings.taskGate
+
     fun listDailyNoteNames(): List<String> {
         val tree = vaultTree() ?: return emptyList()
         return tree.listFiles().mapNotNull { if (!it.isDirectory) it.name else null }
