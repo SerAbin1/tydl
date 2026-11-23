@@ -299,6 +299,16 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `markdown link task shows link text`() {
+        val task = ObsidianTask(
+            text = "[PortSwigger WebSecurity Academy](https://portswigger.net/web-security)",
+            checked = false,
+        )
+
+        assertEquals("PortSwigger WebSecurity Academy", ObsidianNotes.display(task))
+    }
+
+    @Test
     fun `flipping a task checks it off in place`() {
         val updated = ObsidianNotes.withTaskChecked(noteContent, "Write the design doc")
 

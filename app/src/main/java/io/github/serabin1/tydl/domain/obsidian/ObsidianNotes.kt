@@ -153,7 +153,7 @@ object ObsidianNotes {
                 return if (rest.startsWith(":")) "$project: ${rest.substring(1).trim()}".ifBlank { project } else project
             }
         }
-        Regex("""\[[^\]]+\]\([^)]*\)""").find(text)?.let {
+        Regex("""\[([^\]]+)\]\([^)]*\)""").find(text)?.let {
             return it.groupValues[1].trim().ifBlank { task.text }
         }
         return task.text
