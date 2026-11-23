@@ -63,6 +63,20 @@ class ObsidianVault(private val context: Context) {
     /** The hour of the day (0-23) after which the next day's note rolls over. */
     fun rolloverHour(): Int = settings.rolloverHour
 
+    fun filenameFormat(): String = settings.filenameFormat
+
+    fun listDailyNoteNames(): List<String> {
+        val tree = vaultTree() ?: return emptyList()
+        return tree.listFiles().mapNotNull { if (!it.isDirectory) it.name else null }
+    }
+
+    fun readNote(name: String): String? {
+        val file = findFile(name) ?: return null
+        return context.contentResolver.openInputStream(file.uri)?.use { stream ->
+            String(stream.readBytes(), Charsets.UTF_8)
+        }
+    }
+
     /** The content of the most recent daily note strictly before [beforeName], by date. */
     fun latestNoteBefore(beforeName: String): String? {
         val vaultUri = settings.vaultUri ?: return null

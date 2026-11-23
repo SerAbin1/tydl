@@ -524,25 +524,26 @@ class GuardService : Service() {
         if (lastRolloverDayKey == todayKey) return
         val dayStart = localDayStart(now)
         if (now < dayStart + vault.rolloverHour() * 60_000L) return
-        performRollover()
-        lastRolloverDayKey = todayKey
+        if (performRollover()) lastRolloverDayKey = todayKey
     }
 
-    private fun performRollover() {
-        val vault = this.vault ?: return
-        if (!vault.isConfigured()) return
+    private fun performRollover(): Boolean {
+        if (!vault.isConfigured()) return false
         val todayName = vault.todayFileName()
-        if (!vault.hasToday()) vault.createTodayFromTemplate()
-        val todayContent = vault.readToday() ?: return
-        val yesterdayContent = vault.latestNoteBefore(todayName) ?: return
-        val carried = ObsidianNotes.carryOverTasks(yesterdayContent)
-        if (carried.isEmpty()) return
-        // Only fill the carry-over slot when it is still empty: an Obsidian-created note wins.
-        if (ObsidianNotes.parse(todayContent, todayName).carryOverTasks.isNotEmpty()) return
-        vault.writeToday(ObsidianNotes.insertIntoCarryOver(todayContent, carried))
-        var oldContent = yesterdayContent
-        carried.forEach { oldContent = ObsidianNotes.withTaskRemoved(oldContent, it.text) }
-        vault.writeToday(oldContent)
+        if (!vault.hasToday() && !vault.createTodayFromTemplate()) return false
+        val todayContent = vault.readToday() ?: return false
+        val previousName = ObsidianNotes.latestEarlierDailyNote(
+            vault.listDailyNoteNames(),
+            todayName,
+            vault.filenameFormat(),
+        ) ?: run { return true }
+        val previousContent = vault.readNote(previousName) ?: return true
+        val plan = ObsidianNotes.planRollover(todayContent, previousContent) ?: return true
+        if (!vault.writeToday(plan.updatedToday)) return false
+        val verify = vault.readToday() ?: return false
+        if (ObsidianNotes.parse(verify).carryOverTasks.size < plan.carriedTasks.size) return false
+        if (!vault.writeNote(previousName, plan.updatedPrevious)) return false
+        return true
     }
 
     private fun localDayStart(now: Long): Long =
