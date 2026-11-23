@@ -169,6 +169,27 @@ object ObsidianNotes {
             .joinToString("\n")
     }
 
+    /**
+     * Plan rollover: carry unchecked backlog from previous note into today's carry-over slot.
+     * Returns null when nothing to carry or today's carry-over is not empty.
+     */
+    data class RolloverPlan(
+        val updatedToday: String,
+        val updatedPrevious: String,
+        val carriedTasks: List<ObsidianTask>,
+    )
+
+    fun planRollover(todayContent: String, previousContent: String): RolloverPlan? {
+        val carried = carryOverTasks(previousContent)
+        if (carried.isEmpty()) return null
+        val today = parse(todayContent)
+        if (today.carryOverTasks.isNotEmpty()) return null
+        val updatedToday = insertIntoCarryOver(todayContent, carried)
+        var updatedPrevious = previousContent
+        carried.forEach { updatedPrevious = withTaskRemoved(updatedPrevious, it.text) }
+        return RolloverPlan(updatedToday, updatedPrevious, carried)
+    }
+
     /** Flip a task's checkbox in place: `- [ ]` becomes `- [x]` on that exact line. */
     fun withTaskChecked(content: String, taskText: String): String {
         val lines = content.split("\n").toMutableList()

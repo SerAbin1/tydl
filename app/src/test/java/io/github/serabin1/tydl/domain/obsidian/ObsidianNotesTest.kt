@@ -394,4 +394,74 @@ class ObsidianNotesTest {
         val picked = ObsidianNotes.latestEarlierDailyNote(names, "23-11-2026.md", "DD-MM-YYYY")
         assertEquals("22-11-2026.md", picked)
     }
+
+    @Test
+    fun `rollover plan moves unchecked carry over from previous to today`() {
+        val today = """
+            Today, 23-11-2026
+
+            - [ ] Routine
+
+            ---
+
+            -
+
+            ---
+
+            -
+            > [!quote] Q
+            """.trimIndent()
+        val previous = """
+            Today, 22-11-2026
+
+            - [ ] Routine
+
+            ---
+
+            - [ ] Unfinished
+            - [x] Done
+
+            ---
+
+            -
+            > [!quote] Q
+            """.trimIndent()
+
+        val plan = ObsidianNotes.planRollover(today, previous)!!
+
+        assertEquals(listOf("Unfinished"), ObsidianNotes.parse(plan.updatedToday).carryOverTasks.map { it.text })
+        assertTrue(!plan.updatedPrevious.contains("- [ ] Unfinished"))
+        assertTrue(plan.updatedPrevious.contains("- [x] Done"))
+    }
+
+    @Test
+    fun `rollover plan is null when today carry over is not empty`() {
+        val today = """
+            Today
+
+            - [ ] Routine
+
+            ---
+
+            - [ ] Already here
+
+            ---
+
+            -
+        """.trimIndent()
+        val previous = """
+            Yesterday
+
+            - [ ] R
+
+            ---
+
+            - [ ] Unfinished
+
+            ---
+
+            -
+        """.trimIndent()
+        assertNull(ObsidianNotes.planRollover(today, previous))
+    }
 }
