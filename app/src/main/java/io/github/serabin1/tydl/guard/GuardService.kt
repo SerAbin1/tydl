@@ -80,6 +80,8 @@ class GuardService : Service() {
 
     /** Tasks picked from the vault for the current prompt, if the vault is configured. */
     private var suggestedTasks: List<ObsidianTask> = emptyList()
+    /** A task the user tapped; pre-fills reason but keeps friction (time still required). */
+    private var pendingTask: ObsidianTask? = null
 
     /** Local day key of the last rollover performed; rollover runs once per day. */
     private var lastRolloverDayKey: String? = null
@@ -310,15 +312,22 @@ class GuardService : Service() {
         if (changed) wakeSignal.trySend(Unit)
     }
 
-    private fun showPrompt() = whenUnlocked("prompt") {
-        suggestedTasks = loadSuggestedTasks()
-        if (suggestedTasks.isNotEmpty()) {
-            showTasks(suggestedTasks) { task ->
-                suggestedTasks = emptyList()
-                startTask(this@GuardService, task)
+    private fun showPrompt() {
+        whenUnlocked("prompt") {
+            suggestedTasks = loadSuggestedTasks()
+            if (suggestedTasks.isNotEmpty() && pendingTask == null) {
+                showTasks(suggestedTasks) { task ->
+                    suggestedTasks = emptyList()
+                    pendingTask = task
+                    showPrompt()
+                }
+                return@whenUnlocked
             }
-            return@whenUnlocked
+            showPromptForm()
         }
+    }
+
+    private fun showPromptForm() {
         if (!Settings.canDrawOverlays(this)) {
             Log.i(TAG, "prompt: no overlay permission, using notification")
             notifyAlert(
@@ -328,10 +337,13 @@ class GuardService : Service() {
             )
         } else {
             hidePrompt()
+            val initialReason = pendingTask?.let { ObsidianNotes.display(it) } ?: ""
+            val taskText = pendingTask?.text
             promptOverlay = showOverlay { overlay ->
                 TydlTheme {
-                    PromptScreen(onStart = { reason, minutes ->
-                        startSession(this@GuardService, reason, minutes)
+                    PromptScreen(initialReason = initialReason, onStart = { reason, minutes ->
+                        startSession(this@GuardService, reason, minutes, taskText)
+                        pendingTask = null
                         overlay.remove()
                         promptOverlay = null
                     })
@@ -342,11 +354,13 @@ class GuardService : Service() {
     }
 
     private fun loadSuggestedTasks(): List<ObsidianTask> {
-        val vault = this.vault ?: return emptyList()
         if (!vault.isConfigured()) return emptyList()
         if (!vault.hasToday()) return emptyList()
         val content = vault.readToday() ?: return emptyList()
-        return ObsidianNotes.suggestions(ObsidianNotes.parse(content, vault.todayFileName()))
+        return ObsidianNotes.suggestions(
+            ObsidianNotes.parse(content, vault.todayFileName()),
+            vault.taskGate(),
+        )
     }
 
     private fun showTasks(tasks: List<ObsidianTask>, onTask: (ObsidianTask) -> Unit) {

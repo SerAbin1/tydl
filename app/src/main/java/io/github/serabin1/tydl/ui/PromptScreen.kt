@@ -43,8 +43,11 @@ fun promptMinutes(text: String): Int? =
     text.toIntOrNull()?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
 
 @Composable
-fun PromptScreen(onStart: (String, Int) -> Unit) {
-    var reasonText by remember { mutableStateOf("") }
+fun PromptScreen(
+    initialReason: String = "",
+    onStart: (String, Int) -> Unit,
+) {
+    var reasonText by remember(initialReason) { mutableStateOf(initialReason) }
     var minutesText by remember { mutableStateOf("") }
 
     val reason = promptReason(reasonText)
