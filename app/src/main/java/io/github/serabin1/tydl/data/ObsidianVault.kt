@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteVault
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
+import io.github.serabin1.tydl.domain.log.LogTag
+import io.github.serabin1.tydl.log.TydlLog
 import java.time.LocalDateTime
 
 /**
@@ -40,16 +42,25 @@ class ObsidianVault(private val context: Context) : DailyNoteVault {
     /** Ensures [name] exists with the template contents. Idempotent: an existing file is untouched. */
     override fun createFromTemplate(name: String): Boolean {
         if (findFile(name) != null) return true
-        val templateContent = readTemplate() ?: return false
-        val tree = vaultTree() ?: return false
-        val created = tree.createFile("text/markdown", name) ?: return false
+        val templateContent = readTemplate() ?: run {
+            TydlLog.w(LogTag.VAULT, "createFromTemplate: no template selected for $name")
+            return false
+        }
+        val tree = vaultTree() ?: run {
+            TydlLog.w(LogTag.VAULT, "createFromTemplate: vault folder unavailable")
+            return false
+        }
+        val created = tree.createFile("text/markdown", name) ?: run {
+            TydlLog.w(LogTag.VAULT, "createFromTemplate: SAF refused to create $name")
+            return false
+        }
         if (created.name != name) {
-            android.util.Log.w("Tydl", "createFromTemplate: SAF renamed $name to ${created.name}, deleting stray")
+            TydlLog.w(LogTag.VAULT, "createFromTemplate: SAF renamed $name to ${created.name}, deleting stray")
             created.delete()
             return findFile(name) != null
         }
         val written = writeDocument(created, templateContent)
-        android.util.Log.i("Tydl", "createFromTemplate: created=$name written=$written")
+        TydlLog.i(LogTag.VAULT, "createFromTemplate: created=$name written=$written")
         return written
     }
 

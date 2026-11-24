@@ -10,7 +10,6 @@ import android.graphics.PixelFormat
 import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -36,10 +35,13 @@ import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.domain.Session
+import io.github.serabin1.tydl.domain.describe
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteRollover
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
 import io.github.serabin1.tydl.domain.obsidian.ObsidianTask
 import io.github.serabin1.tydl.domain.obsidian.RolloverResult
+import io.github.serabin1.tydl.domain.log.LogTag
+import io.github.serabin1.tydl.log.TydlLog
 import io.github.serabin1.tydl.ui.DoneScreen
 import io.github.serabin1.tydl.ui.ExpiryScreen
 import io.github.serabin1.tydl.ui.MainActivity
@@ -101,7 +103,7 @@ class GuardService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_USER_PRESENT -> {
-                    Log.i(TAG, "USER_PRESENT (keyguardLocked=${keyguard.isKeyguardLocked})")
+                    TydlLog.i(LogTag.UNLOCK, "USER_PRESENT (keyguardLocked=${keyguard.isKeyguardLocked})")
                     cancelKeyguardPoll("user present")
                     maybeRollover("user present")
                     onUnlock()
@@ -109,7 +111,7 @@ class GuardService : Service() {
 
                 Intent.ACTION_SCREEN_ON -> {
                     val locked = keyguard.isKeyguardLocked
-                    Log.i(TAG, "SCREEN_ON (keyguardLocked=$locked)")
+                    TydlLog.i(LogTag.UNLOCK, "SCREEN_ON (keyguardLocked=$locked)")
                     maybeRollover("screen on")
                     if (!locked) {
                         cancelKeyguardPoll("screen on unlocked")
@@ -122,7 +124,7 @@ class GuardService : Service() {
                 }
 
                 Intent.ACTION_SCREEN_OFF -> {
-                    Log.i(TAG, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
+                    TydlLog.i(LogTag.UNLOCK, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
                     cancelKeyguardPoll("screen off")
                     handle(GuardEvent.ScreenOff(now()))
                     wakeSignal.trySend(Unit)
@@ -130,7 +132,7 @@ class GuardService : Service() {
 
                 Intent.ACTION_TIME_CHANGED,
                 Intent.ACTION_TIMEZONE_CHANGED -> {
-                    Log.i(TAG, "${intent.action}: clock changed")
+                    TydlLog.i(LogTag.SERVICE, "${intent.action}: clock changed")
                     maybeRollover("clock changed")
                     wakeSignal.trySend(Unit)
                 }
@@ -140,13 +142,14 @@ class GuardService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         store = GuardStore(this)
         keyguard = getSystemService(KeyguardManager::class.java)
         power = getSystemService(PowerManager::class.java)
         vault = ObsidianVault(this)
         rollover = DailyNoteRollover(vault)
         state = store.load()
-        Log.i(TAG, "service created; session=${state.session?.reason ?: "none"}")
+        TydlLog.i(LogTag.SERVICE, "service created; state=${stateLabel()}")
         GuardNotifications.ensureChannels(this)
         ContextCompat.registerReceiver(
             this,
@@ -164,7 +167,7 @@ class GuardService : Service() {
             GuardNotifications.ID_GUARD,
             GuardNotifications.guard(this, state),
         )
-        Log.i(TAG, "foreground started")
+        TydlLog.i(LogTag.SERVICE, "foreground started")
         maybeRollover("service created")
         startDeadlineLoop()
     }
@@ -179,15 +182,15 @@ class GuardService : Service() {
             while (isActive) {
                 val at = nextWake()
                 if (at == null) {
-                    Log.i(TAG, "no deadline pending; waiting for a state change")
+                    TydlLog.i(LogTag.SERVICE, "no deadline pending; waiting for a state change")
                     wakeSignal.receive()
                     continue
                 }
                 val wait = (at - now()).coerceAtLeast(0L)
-                Log.i(TAG, "next deadline in $wait ms")
+                TydlLog.i(LogTag.SERVICE, "next deadline in $wait ms")
                 val signalled = withTimeoutOrNull(wait) { wakeSignal.receive() }
                 if (signalled == null) {
-                    Log.i(TAG, "deadline reached")
+                    TydlLog.i(LogTag.SERVICE, "deadline reached")
                     handle(GuardEvent.DeadlineReached(now()))
                 }
             }
@@ -226,7 +229,7 @@ class GuardService : Service() {
             )
             ACTION_PAUSE -> handle(GuardEvent.Paused(command.getLongExtra(EXTRA_UNTIL, 0L)))
             ACTION_UNLOCK -> {
-                Log.i(TAG, "manual unlock requested")
+                TydlLog.i(LogTag.UNLOCK, "manual unlock requested")
                 onUnlock()
             }
         }
@@ -236,7 +239,8 @@ class GuardService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        Log.i(TAG, "service destroyed")
+        running = false
+        TydlLog.i(LogTag.SERVICE, "service destroyed")
         cancelKeyguardPoll("destroy")
         scope.cancel()
         hidePrompt()
@@ -246,7 +250,7 @@ class GuardService : Service() {
         try {
             unregisterReceiver(unlockReceiver)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Receiver already gone", e)
+            TydlLog.w(LogTag.ERROR, "receiver already gone", e)
         }
         super.onDestroy()
     }
@@ -257,7 +261,7 @@ class GuardService : Service() {
         wakeSignal.trySend(Unit)
         val at = now()
         if (at - lastUnlockAt < UNLOCK_DEBOUNCE_MS) {
-            Log.i(TAG, "unlock debounced (${at - lastUnlockAt} ms)")
+            TydlLog.i(LogTag.UNLOCK, "unlock debounced (${at - lastUnlockAt} ms)")
             return
         }
         lastUnlockAt = at
@@ -269,21 +273,21 @@ class GuardService : Service() {
     private fun startKeyguardPoll() {
         cancelKeyguardPoll("restart")
         keyguardPollJob = scope.launch {
-            Log.i(TAG, "keyguard poll started")
+            TydlLog.i(LogTag.UNLOCK, "keyguard poll started")
             val deadline = now() + KEYGUARD_POLL_TIMEOUT_MS
             while (isActive && now() < deadline) {
                 delay(KEYGUARD_POLL_INTERVAL_MS)
                 if (!keyguard.isKeyguardLocked) {
-                    Log.i(TAG, "keyguard poll success")
+                    TydlLog.i(LogTag.UNLOCK, "keyguard poll success")
                     onUnlock()
                     return@launch
                 }
                 if (!power.isInteractive) {
-                    Log.i(TAG, "keyguard poll stopped: screen off")
+                    TydlLog.i(LogTag.UNLOCK, "keyguard poll stopped: screen off")
                     return@launch
                 }
             }
-            Log.i(TAG, "keyguard poll timeout")
+            TydlLog.i(LogTag.UNLOCK, "keyguard poll timeout")
         }
     }
 
@@ -291,7 +295,7 @@ class GuardService : Service() {
         keyguardPollJob?.let {
             if (it.isActive) {
                 it.cancel()
-                Log.i(TAG, "keyguard poll cancelled: $reason")
+                TydlLog.i(LogTag.UNLOCK, "keyguard poll cancelled: $reason")
             }
         }
         keyguardPollJob = null
@@ -306,10 +310,9 @@ class GuardService : Service() {
         }
         // Cheap and silent, and it keeps a paused guard from claiming to be paused after it ends.
         notifyGuard()
-        Log.i(
-            TAG,
-            "event=${event::class.simpleName} effect=${step.effect::class.simpleName} " +
-                "session=${state.session?.reason ?: "none"}",
+        TydlLog.i(
+            LogTag.SESSION,
+            "event=${event.describe()} effect=${step.effect.describe()} state=${stateLabel()}",
         )
         when (step.effect) {
             GuardEffect.ShowPrompt -> showPrompt()
@@ -346,7 +349,7 @@ class GuardService : Service() {
 
     private fun showPromptForm() {
         if (!Settings.canDrawOverlays(this)) {
-            Log.i(TAG, "prompt: no overlay permission, using notification")
+            TydlLog.i(LogTag.PROMPT, "no overlay permission, using notification")
             notifyAlert(
                 title = "State your reason",
                 text = "Tap to tell Tydl why you unlocked.",
@@ -366,29 +369,32 @@ class GuardService : Service() {
                     })
                 }
             }
-            Log.i(TAG, "prompt overlay shown")
+            TydlLog.i(LogTag.PROMPT, "overlay shown")
         }
     }
 
     private fun loadSuggestedTasks(): List<ObsidianTask> {
         if (!vault.isConfigured()) {
-            Log.i(TAG, "tasks: vault not configured")
+            TydlLog.i(LogTag.TASKS, "vault not configured")
             return emptyList()
         }
         val today = vault.todayFileName()
         if (!vault.hasToday()) {
-            Log.i(TAG, "tasks: no note for $today")
+            TydlLog.i(LogTag.TASKS, "no note for $today")
             return emptyList()
         }
         val content = vault.readToday() ?: run {
-            Log.w(TAG, "tasks: failed to read $today")
+            TydlLog.w(LogTag.TASKS, "failed to read $today")
             return emptyList()
         }
         val suggestions = ObsidianNotes.suggestions(
             ObsidianNotes.parse(content, today),
             vault.taskGate(),
         )
-        Log.i(TAG, "tasks: ${suggestions.size} suggestions from $today gate=${vault.taskGate()}")
+        TydlLog.i(
+            LogTag.TASKS,
+            "${suggestions.size} suggestions from $today gate=${vault.taskGate()}",
+        )
         return suggestions
     }
 
@@ -426,7 +432,7 @@ class GuardService : Service() {
         val taskText = state.selectedTask ?: return
         scope.launch(Dispatchers.IO) {
             val done = vault.completeTask(taskText)
-            Log.i(TAG, "completeTask done=$done task=$taskText")
+            TydlLog.i(LogTag.SESSION, "task check-off done=$done")
         }
     }
 
@@ -434,7 +440,7 @@ class GuardService : Service() {
     fun appendReflection(note: String) {
         scope.launch(Dispatchers.IO) {
             val done = vault.appendReflection(note)
-            Log.i(TAG, "appendReflection done=$done")
+            TydlLog.i(LogTag.SESSION, "reflection saved=$done")
         }
     }
 
@@ -443,11 +449,11 @@ class GuardService : Service() {
         // An unlock and a deadline can both ask for the expiry; rebuilding it would wipe whatever
         // the user has typed into the extend form.
         if (expiryOverlay != null) {
-            Log.i(TAG, "expiry overlay already showing")
+            TydlLog.i(LogTag.SESSION, "expiry overlay already showing")
             return@whenUnlocked
         }
         if (!Settings.canDrawOverlays(this)) {
-            Log.i(TAG, "expiry: no overlay permission, using notification")
+            TydlLog.i(LogTag.SESSION, "expiry: no overlay permission, using notification")
             notifyAlert(
                 title = "Time's up",
                 text = "\"${session.reason}\" is past its minutes.",
@@ -488,7 +494,7 @@ class GuardService : Service() {
                     )
                 }
             }
-            Log.i(TAG, "expiry overlay shown")
+            TydlLog.i(LogTag.SESSION, "expiry overlay shown")
         }
     }
 
@@ -519,7 +525,7 @@ class GuardService : Service() {
                     )
                 }
             }
-            Log.i(TAG, "done overlay shown")
+            TydlLog.i(LogTag.SESSION, "done overlay shown")
         }
     }
 
@@ -537,7 +543,7 @@ class GuardService : Service() {
             block()
             return
         }
-        Log.i(TAG, "$label: keyguard still locked (attempt $attempt)")
+        TydlLog.i(LogTag.UNLOCK, "$label: keyguard still locked (attempt $attempt)")
         if (attempt < MAX_UNLOCK_ATTEMPTS) {
             scope.launch {
                 delay(KEYGUARD_RETRY_MS)
@@ -579,6 +585,13 @@ class GuardService : Service() {
 
     private fun now(): Long = System.currentTimeMillis()
 
+    /** Never includes the reason or task text: the log is for decisions, not user prose. */
+    private fun stateLabel(): String = when {
+        state.isPaused(now()) -> "paused"
+        state.session != null -> "active"
+        else -> "none"
+    }
+
     /**
      * Triggers the idempotent daily-note rollover off the main thread. Every trigger (screen on,
      * unlock, app start, clock change, prompt) calls this: it re-derives what to do from the
@@ -591,13 +604,18 @@ class GuardService : Service() {
     }
 
     private suspend fun ensureRollover(reason: String): RolloverResult {
+        val started = System.currentTimeMillis()
         val result = try {
             rollover.ensureToday()
         } catch (e: Exception) {
-            Log.w(TAG, "rollover ($reason) threw", e)
-            RolloverResult.Failed(e.message ?: e::class.simpleName ?: "exception")
+            TydlLog.w(LogTag.ROLLOVER, "rollover ($reason) threw", e)
+            RolloverResult.Failed(e.message ?: "exception")
         }
-        Log.i(TAG, "rollover ($reason): $result")
+        TydlLog.i(
+            LogTag.ROLLOVER,
+            "rollover ($reason): ${result.describe()} " +
+                "(today=${vault.todayFileName()}, ${System.currentTimeMillis() - started}ms)",
+        )
         return result
     }
 
@@ -653,7 +671,7 @@ class GuardService : Service() {
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
                 wm.removeView(view)
             } catch (e: Exception) {
-                Log.w(TAG, "Could not remove overlay", e)
+                TydlLog.w(LogTag.ERROR, "could not remove overlay", e)
             } finally {
                 store.clear()
             }
@@ -661,7 +679,12 @@ class GuardService : Service() {
     }
 
     companion object {
-        private const val TAG = "Tydl"
+        @Volatile
+        private var running = false
+
+        /** Same process as the activity, so this is cheaper and more reliable than dumpsys. */
+        fun isRunning(): Boolean = running
+
         private const val ACTION_START = "io.github.serabin1.tydl.action.START"
         private const val ACTION_END = "io.github.serabin1.tydl.action.END"
         private const val ACTION_EXTEND = "io.github.serabin1.tydl.action.EXTEND"
@@ -741,7 +764,7 @@ class GuardService : Service() {
             try {
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: Exception) {
-                Log.w(TAG, "Could not start the guard", e)
+                TydlLog.w(LogTag.ERROR, "could not start the guard", e)
             }
         }
     }

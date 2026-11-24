@@ -9,6 +9,8 @@ import android.service.quicksettings.TileService
 import io.github.serabin1.tydl.R
 import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.obsidian.ObsidianUris
+import io.github.serabin1.tydl.domain.log.LogTag
+import io.github.serabin1.tydl.log.TydlLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,7 +43,8 @@ class DailyNoteTileService : TileService() {
         scope.launch {
             val name = withContext(Dispatchers.IO) {
                 val name = vault.todayFileName()
-                vault.createFromTemplate(name)
+                val created = vault.createFromTemplate(name)
+                TydlLog.i(LogTag.VAULT, "tile: prepared $name (created=$created)")
                 name
             }
             openInObsidian(ObsidianUris.openNote(name))

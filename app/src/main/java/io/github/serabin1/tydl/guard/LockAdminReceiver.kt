@@ -5,22 +5,21 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import io.github.serabin1.tydl.domain.log.LogTag
+import io.github.serabin1.tydl.log.TydlLog
 
 /** Enables "I'm done" to lock the screen. The user must activate this in system settings. */
 class LockAdminReceiver : DeviceAdminReceiver() {
 
     override fun onEnabled(context: Context, intent: Intent) {
-        Log.i(TAG, "device admin enabled")
+        TydlLog.i(LogTag.SERVICE, "device admin enabled")
     }
 
     override fun onDisabled(context: Context, intent: Intent) {
-        Log.i(TAG, "device admin disabled")
+        TydlLog.i(LogTag.SERVICE, "device admin disabled")
     }
 
     companion object {
-        private const val TAG = "Tydl"
-
         fun componentName(context: Context): ComponentName =
             ComponentName(context, LockAdminReceiver::class.java)
 
@@ -36,7 +35,7 @@ class LockAdminReceiver : DeviceAdminReceiver() {
                 dpm.lockNow()
                 true
             } catch (e: SecurityException) {
-                Log.w(TAG, "Could not lock screen", e)
+                TydlLog.w(LogTag.ERROR, "could not lock the screen", e)
                 false
             }
         }

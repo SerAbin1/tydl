@@ -49,6 +49,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -63,8 +64,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.domain.GuardState
+import io.github.serabin1.tydl.domain.log.LogEntry
+import io.github.serabin1.tydl.domain.log.LogFormat
 import io.github.serabin1.tydl.guard.GuardService
 import io.github.serabin1.tydl.guard.LockAdminReceiver
+import io.github.serabin1.tydl.domain.log.LogTag
+import io.github.serabin1.tydl.log.TydlLog
 import io.github.serabin1.tydl.tile.DailyNoteTileService
 import io.github.serabin1.tydl.ui.theme.Edge
 import io.github.serabin1.tydl.ui.theme.Foam
@@ -91,6 +96,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var settingsStore: ObsidianSettingsStore
     private var obsidianSettings by mutableStateOf(ObsidianSettings.defaults())
     private var showSettings by mutableStateOf(false)
+    private var showLogs by mutableStateOf(false)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
@@ -105,6 +111,7 @@ class MainActivity : ComponentActivity() {
             )
             obsidianSettings = obsidianSettings.copy(vaultUri = treeUri.toString())
             settingsStore.save(obsidianSettings)
+            TydlLog.i(LogTag.SETTINGS, "vault folder selected")
             refresh()
         }
     }
@@ -119,6 +126,7 @@ class MainActivity : ComponentActivity() {
             )
             obsidianSettings = obsidianSettings.copy(templateUri = uri.toString())
             settingsStore.save(obsidianSettings)
+            TydlLog.i(LogTag.SETTINGS, "template file selected")
             refresh()
         }
     }
@@ -126,6 +134,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        TydlLog.init(applicationContext)
+        TydlLog.i(LogTag.APP, "app opened")
         GuardService.start(this)
         obsidianVault = ObsidianVault(this)
         settingsStore = ObsidianSettingsStore(this)
@@ -134,13 +144,29 @@ class MainActivity : ComponentActivity() {
         setContent {
             TydlTheme {
                 when {
+                    showLogs -> {
+                        val logEntries by TydlLog.entries.collectAsState()
+                        LogsScreen(
+                            entries = logEntries,
+                            vaultConfigured = obsidianSettings.vaultUri != null,
+                            todayNote = obsidianVault.todayFileName(),
+                            rolloverHour = obsidianSettings.rolloverHour,
+                            serviceRunning = isGuardRunning(),
+                            onBack = { showLogs = false },
+                            onClear = { TydlLog.clear() },
+                            onShare = { shareLogs(logEntries) },
+                        )
+                    }
+
                     showSettings -> SettingsScreen(
                         settings = obsidianSettings,
                         onBack = { showSettings = false },
                         onPickVault = { vaultPickerLauncher.launch(null) },
                         onPickTemplate = { templatePickerLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
                         onAddTile = ::requestAddDailyNoteTile,
+                        onViewLogs = { showLogs = true },
                         onSettingsChange = { s ->
+                            logSettingsChange(obsidianSettings, s)
                             obsidianSettings = s
                             settingsStore.save(s)
                         },
@@ -277,6 +303,7 @@ class MainActivity : ComponentActivity() {
                 StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "Daily note tile not added"
                 else -> "Could not add the daily note tile"
             }
+            TydlLog.i(LogTag.SETTINGS, "tile add: $message")
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
@@ -332,6 +359,28 @@ class MainActivity : ComponentActivity() {
         batteryExempt = getSystemService(PowerManager::class.java)
             .isIgnoringBatteryOptimizations(packageName)
     }
+
+    /** Discrete settings only: the filename field fires per keystroke, so it stays out of the log. */
+    private fun logSettingsChange(old: ObsidianSettings, new: ObsidianSettings) {
+        if (old.rolloverHour != new.rolloverHour) {
+            TydlLog.i(LogTag.SETTINGS, "rollover hour = ${new.rolloverHour}")
+        }
+        if (old.taskGate != new.taskGate) {
+            TydlLog.i(LogTag.SETTINGS, "task gate = ${new.taskGate}")
+        }
+    }
+
+    private fun shareLogs(entries: List<LogEntry>) {
+        val text = entries.asReversed().joinToString("\n") { LogFormat.line(it) }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Tydl logs")
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        startActivity(Intent.createChooser(intent, "Share Tydl logs"))
+    }
+
+    private fun isGuardRunning(): Boolean = GuardService.isRunning()
 
     private fun openOverlaySettings() {
         startActivity(
@@ -621,6 +670,7 @@ private fun SettingsScreen(
     onPickVault: () -> Unit,
     onPickTemplate: () -> Unit,
     onAddTile: () -> Unit,
+    onViewLogs: () -> Unit,
     onSettingsChange: (ObsidianSettings) -> Unit,
 ) {
     Column(
@@ -707,6 +757,16 @@ private fun SettingsScreen(
                 Text(label, color = if (selected) Tide else Mist)
             }
         }
+
+        Spacer(Modifier.height(32.dp))
+        Text("DIAGNOSTICS", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
+        Spacer(Modifier.height(8.dp))
+        SetupCard(
+            title = "View logs",
+            body = "Every decision Tydl made: unlocks, rollovers, prompts, and errors.",
+            action = "View",
+            onClick = onViewLogs,
+        )
         Spacer(Modifier.height(40.dp))
     }
 }
