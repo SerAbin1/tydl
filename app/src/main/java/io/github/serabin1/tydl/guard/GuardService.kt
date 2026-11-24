@@ -34,6 +34,7 @@ import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
+import io.github.serabin1.tydl.domain.Reflections
 import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.domain.describe
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteRollover
@@ -221,11 +222,9 @@ class GuardService : Service() {
             )
 
             ACTION_END -> handle(GuardEvent.End)
-            ACTION_EXTEND -> handle(
-                GuardEvent.Extend(
-                    now = now(),
-                    minutes = command.getIntExtra(EXTRA_MINUTES, Session.EXTENSION_MINUTES),
-                ),
+            ACTION_EXTEND -> extendSession(
+                reason = command.getStringExtra(EXTRA_REASON).orEmpty(),
+                minutes = command.getIntExtra(EXTRA_MINUTES, Session.EXTENSION_MINUTES),
             )
             ACTION_PAUSE -> handle(GuardEvent.Paused(command.getLongExtra(EXTRA_UNTIL, 0L)))
             ACTION_UNLOCK -> {
@@ -444,6 +443,20 @@ class GuardService : Service() {
         }
     }
 
+    /**
+     * Extends a live session and, when the engine accepted it, appends the extension's reason to
+     * today's REFLECTION slot, so the note carries both the added time and why it was added.
+     */
+    private fun extendSession(reason: String, minutes: Int) {
+        val safeMinutes = minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
+        val before = state.session
+        handle(GuardEvent.Extend(now(), safeMinutes, reason))
+        val applied = state.session != null &&
+            before != null &&
+            state.session!!.extensionsUsed == before.extensionsUsed + 1
+        if (applied) appendReflection(Reflections.extension(safeMinutes, reason))
+    }
+
     private fun showExpiry() = whenUnlocked("expiry") {
         val session = state.session ?: return@whenUnlocked
         // An unlock and a deadline can both ask for the expiry; rebuilding it would wipe whatever
@@ -486,8 +499,8 @@ class GuardService : Service() {
                             overlay.remove()
                             expiryOverlay = null
                         },
-                        onExtend = { minutes ->
-                            extend(this@GuardService, minutes)
+                        onExtend = { reason, minutes ->
+                            extend(this@GuardService, reason, minutes)
                             overlay.remove()
                             expiryOverlay = null
                         },
@@ -732,11 +745,16 @@ class GuardService : Service() {
             }
         }
 
-        fun extend(context: Context, minutes: Int = Session.EXTENSION_MINUTES) = send(
+        fun extend(
+            context: Context,
+            reason: String,
+            minutes: Int = Session.EXTENSION_MINUTES,
+        ) = send(
             context,
             base(context)
                 .setAction(ACTION_EXTEND)
-                .putExtra(EXTRA_MINUTES, minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)),
+                .putExtra(EXTRA_MINUTES, minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES))
+                .putExtra(EXTRA_REASON, reason),
         )
 
         fun pause(context: Context, minutes: Int) = send(

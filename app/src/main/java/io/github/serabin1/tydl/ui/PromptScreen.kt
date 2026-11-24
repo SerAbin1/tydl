@@ -31,13 +31,12 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.serabin1.tydl.domain.Reasons
 import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Ink
 import io.github.serabin1.tydl.ui.theme.Mist
 import io.github.serabin1.tydl.ui.theme.Tide
-
-fun promptReason(reason: String): String? = reason.trim().ifBlank { null }
 
 fun promptMinutes(text: String): Int? =
     text.toIntOrNull()?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
@@ -50,7 +49,7 @@ fun PromptScreen(
     var reasonText by remember(initialReason) { mutableStateOf(initialReason) }
     var minutesText by remember { mutableStateOf("") }
 
-    val reason = promptReason(reasonText)
+    val reason = Reasons.accepted(reasonText, preFilled = initialReason.isNotBlank())
     val minutes = promptMinutes(minutesText)
 
     Column(
@@ -87,7 +86,7 @@ fun PromptScreen(
             value = reasonText,
             onValueChange = { reasonText = it },
             label = { Text("Reason") },
-            supportingText = { Text("Type why you're opening your phone.") },
+            supportingText = { Text("At least 4 words: why you're opening your phone.") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             shape = RoundedCornerShape(14.dp),

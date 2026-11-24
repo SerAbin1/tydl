@@ -69,7 +69,7 @@ class GuardEngineTest {
     @Test
     fun `a stale deadline after an extend does nothing`() {
         val extended = GuardEngine
-            .reduce(started(), GuardEvent.Extend(t0 + 2 * minute))
+            .reduce(started(), GuardEvent.Extend(t0 + 2 * minute, reason = "checking the upload"))
             .state
 
         assertEquals(GuardEffect.None, deadline(extended, t0 + 5 * minute).effect)
@@ -88,11 +88,33 @@ class GuardEngineTest {
     fun `extending a session revives it`() {
         val expired = deadline(started(), t0 + 5 * minute).state
 
-        val step = GuardEngine.reduce(expired, GuardEvent.Extend(t0 + 5 * minute))
+        val step = GuardEngine.reduce(expired, GuardEvent.Extend(t0 + 5 * minute, reason = "still writing the notes"))
 
         assertEquals(GuardEffect.None, step.effect)
         assertEquals(t0 + 10 * minute, step.state.session!!.endsAt)
         assertEquals(GuardEffect.None, deadline(step.state, t0 + 9 * minute).effect)
+    }
+
+    @Test
+    fun `extending without a reason is ignored`() {
+        val expired = deadline(started(), t0 + 5 * minute).state
+
+        val step = GuardEngine.reduce(expired, GuardEvent.Extend(t0 + 5 * minute, reason = "   "))
+
+        assertEquals(GuardEffect.None, step.effect)
+        assertEquals(expired.session, step.state.session)
+    }
+
+    @Test
+    fun `an extension is applied and counts toward the day`() {
+        val expired = deadline(started(), t0 + 5 * minute).state
+
+        val step = GuardEngine.reduce(expired, GuardEvent.Extend(t0 + 5 * minute, reason = "one more lap"))
+
+        val session = step.state.session
+        assertEquals(t0 + 5 * minute + Session.EXTENSION_MINUTES * Session.MINUTE_MS, session!!.endsAt)
+        assertEquals(1, session.extensionsUsed)
+        assertEquals(GuardEffect.None, step.effect)
     }
 
     @Test
@@ -101,7 +123,7 @@ class GuardEngineTest {
             session = Session.start("Email", 5, t0).extend(t0).extend(t0),
         )
 
-        val step = GuardEngine.reduce(maxed, GuardEvent.Extend(t0 + 5 * minute))
+        val step = GuardEngine.reduce(maxed, GuardEvent.Extend(t0 + 5 * minute, reason = "more time"))
 
         assertEquals(maxed, step.state)
         assertEquals(GuardEffect.None, step.effect)
@@ -193,7 +215,7 @@ class GuardEngineTest {
     @Test
     fun `extending moves the scheduled wake to the new end`() {
         val extended = GuardEngine
-            .reduce(started(), GuardEvent.Extend(t0 + 2 * minute))
+            .reduce(started(), GuardEvent.Extend(t0 + 2 * minute, reason = "checking the upload"))
             .state
 
         assertEquals(t0 + 10 * minute, wake(extended, t0 + 2 * minute))

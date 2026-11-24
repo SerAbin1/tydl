@@ -30,9 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.serabin1.tydl.domain.Reasons
 import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.ui.theme.Foam
 import io.github.serabin1.tydl.ui.theme.Ink
@@ -45,10 +47,14 @@ fun ExtensionScreen(
     extensionsTodayCount: Int,
     extensionsTodayMinutes: Int,
     quote: String = "Consistency Before Greatness",
-    onExtend: (Int) -> Unit,
+    initialReason: String = "",
+    onExtend: (String, Int) -> Unit,
     onCancel: () -> Unit,
 ) {
+    var reasonText by remember(initialReason) { mutableStateOf(initialReason) }
     var minutesText by remember { mutableStateOf("") }
+
+    val reason = Reasons.accepted(reasonText, preFilled = initialReason.isNotBlank())
     val minutes = promptMinutes(minutesText)
 
     Column(
@@ -97,6 +103,17 @@ fun ExtensionScreen(
         )
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
+            value = reasonText,
+            onValueChange = { reasonText = it },
+            label = { Text("Reason for extending") },
+            supportingText = { Text("At least 4 words: why you need the time.") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
             value = minutesText,
             onValueChange = { minutesText = it.filter(Char::isDigit).take(3) },
             label = { Text("Extension minutes") },
@@ -108,8 +125,11 @@ fun ExtensionScreen(
         )
         Spacer(Modifier.height(24.dp))
         Button(
-            onClick = { minutes?.let(onExtend) },
-            enabled = minutes != null,
+            onClick = {
+                val accepted = reason ?: return@Button
+                minutes?.let { onExtend(accepted, it) }
+            },
+            enabled = reason != null && minutes != null,
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
             modifier = Modifier.fillMaxWidth().height(58.dp),

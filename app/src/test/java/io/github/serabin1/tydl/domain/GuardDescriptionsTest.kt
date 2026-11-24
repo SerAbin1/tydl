@@ -18,7 +18,7 @@ class GuardDescriptionsTest {
             GuardEvent.Start("secret", 5, 0, "private task").describe(),
         )
         assertEquals("End", GuardEvent.End.describe())
-        assertEquals("Extend(minutes=5)", GuardEvent.Extend(0).describe())
+        assertEquals("Extend(minutes=5)", GuardEvent.Extend(0, reason = "still writing the notes").describe())
         assertEquals("Paused", GuardEvent.Paused(1).describe())
         assertEquals("Resumed", GuardEvent.Paused(0).describe())
         assertEquals("ScreenOff", GuardEvent.ScreenOff(0).describe())

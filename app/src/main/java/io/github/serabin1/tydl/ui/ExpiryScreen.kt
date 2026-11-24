@@ -48,7 +48,7 @@ fun ExpiryScreen(
     onTaskFinished: () -> Unit = {},
     onDone: (String) -> Unit,
     onStartAnother: (String) -> Unit = {},
-    onExtend: (Int) -> Unit,
+    onExtend: (String, Int) -> Unit,
 ) {
     var mode by remember { mutableStateOf(ExpiryMode.Choice) }
 
@@ -58,8 +58,9 @@ fun ExpiryScreen(
             extensionsTodayCount = extensionsTodayCount,
             extensionsTodayMinutes = extensionsTodayMinutes,
             quote = quote,
-            onExtend = { minutes ->
-                onExtend(minutes)
+            initialReason = session.reason,
+            onExtend = { reason, minutes ->
+                onExtend(reason, minutes)
             },
             onCancel = { mode = ExpiryMode.Choice },
         )

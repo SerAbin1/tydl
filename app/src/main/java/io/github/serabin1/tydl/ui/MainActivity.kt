@@ -253,8 +253,8 @@ class MainActivity : ComponentActivity() {
                                     fallback = null
                                     refresh()
                                 },
-                                onExtend = { minutes ->
-                                    GuardService.extend(this, minutes)
+                                onExtend = { reason, minutes ->
+                                    GuardService.extend(this, reason, minutes)
                                     fallback = null
                                     refresh()
                                 },

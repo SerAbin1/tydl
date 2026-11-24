@@ -40,7 +40,15 @@ sealed interface GuardEvent {
 
     data object End : GuardEvent
 
-    data class Extend(val now: Long, val minutes: Int = Session.EXTENSION_MINUTES) : GuardEvent
+    /**
+     * A live session adds time; [reason] is the user's sentence for it and is appended to today's
+     * REFLECTION slot by the shell when the extend is applied.
+     */
+    data class Extend(
+        val now: Long,
+        val minutes: Int = Session.EXTENSION_MINUTES,
+        val reason: String = "",
+    ) : GuardEvent
 
     data class Paused(val until: Long) : GuardEvent
 
@@ -111,7 +119,7 @@ object GuardEngine {
 
         is GuardEvent.Extend -> {
             val session = state.session
-            if (session != null && session.canExtend()) {
+            if (session != null && session.canExtend() && event.reason.isNotBlank()) {
                 val safeMinutes = event.minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
                 val dayStart = dayStart(event.now)
                 val reset = state.extensionsDayStart != dayStart
