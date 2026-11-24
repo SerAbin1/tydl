@@ -36,8 +36,10 @@ import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.domain.Session
+import io.github.serabin1.tydl.domain.obsidian.DailyNoteRollover
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
 import io.github.serabin1.tydl.domain.obsidian.ObsidianTask
+import io.github.serabin1.tydl.domain.obsidian.RolloverResult
 import io.github.serabin1.tydl.ui.DoneScreen
 import io.github.serabin1.tydl.ui.ExpiryScreen
 import io.github.serabin1.tydl.ui.MainActivity
@@ -84,8 +86,11 @@ class GuardService : Service() {
     /** A task the user tapped; pre-fills reason but keeps friction (time still required). */
     private var pendingTask: ObsidianTask? = null
 
-    /** Local day key of the last rollover performed; rollover runs once per day. */
-    private var lastRolloverDayKey: String? = null
+    /** Daily-note rollover; idempotent and re-evaluated against the vault on every trigger. */
+    private lateinit var rollover: DailyNoteRollover
+
+    /** One in-flight rollover at a time; the triggers are frequent and overlap by design. */
+    private var rolloverJob: Job? = null
 
     private lateinit var vault: ObsidianVault
 
@@ -98,13 +103,14 @@ class GuardService : Service() {
                 Intent.ACTION_USER_PRESENT -> {
                     Log.i(TAG, "USER_PRESENT (keyguardLocked=${keyguard.isKeyguardLocked})")
                     cancelKeyguardPoll("user present")
+                    maybeRollover("user present")
                     onUnlock()
                 }
 
                 Intent.ACTION_SCREEN_ON -> {
                     val locked = keyguard.isKeyguardLocked
                     Log.i(TAG, "SCREEN_ON (keyguardLocked=$locked)")
-                    maybeRollover(now())
+                    maybeRollover("screen on")
                     if (!locked) {
                         cancelKeyguardPoll("screen on unlocked")
                         onUnlock()
@@ -125,6 +131,7 @@ class GuardService : Service() {
                 Intent.ACTION_TIME_CHANGED,
                 Intent.ACTION_TIMEZONE_CHANGED -> {
                     Log.i(TAG, "${intent.action}: clock changed")
+                    maybeRollover("clock changed")
                     wakeSignal.trySend(Unit)
                 }
             }
@@ -137,6 +144,7 @@ class GuardService : Service() {
         keyguard = getSystemService(KeyguardManager::class.java)
         power = getSystemService(PowerManager::class.java)
         vault = ObsidianVault(this)
+        rollover = DailyNoteRollover(vault)
         state = store.load()
         Log.i(TAG, "service created; session=${state.session?.reason ?: "none"}")
         GuardNotifications.ensureChannels(this)
@@ -157,6 +165,7 @@ class GuardService : Service() {
             GuardNotifications.guard(this, state),
         )
         Log.i(TAG, "foreground started")
+        maybeRollover("service created")
         startDeadlineLoop()
     }
 
@@ -195,6 +204,8 @@ class GuardService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A plain start (app open, boot, sticky restart) is also a rollover trigger.
+        if (intent?.action == null) maybeRollover("service start")
         val command = intent ?: return START_STICKY
         when (command.action) {
             ACTION_START -> handle(
@@ -316,7 +327,10 @@ class GuardService : Service() {
     private fun showPrompt() {
         whenUnlocked("prompt") {
             scope.launch {
-                suggestedTasks = withContext(Dispatchers.IO) { loadSuggestedTasks() }
+                suggestedTasks = withContext(Dispatchers.IO) {
+                    ensureRollover("prompt")
+                    loadSuggestedTasks()
+                }
                 if (suggestedTasks.isNotEmpty() && pendingTask == null) {
                     showTasks(suggestedTasks) { task ->
                         suggestedTasks = emptyList()
@@ -566,67 +580,26 @@ class GuardService : Service() {
     private fun now(): Long = System.currentTimeMillis()
 
     /**
-     * First screen-on after the rollover hour of the current day: creates today's note from the
-     * template if needed and carries the previous note's open tasks into today's carry-over slot.
+     * Triggers the idempotent daily-note rollover off the main thread. Every trigger (screen on,
+     * unlock, app start, clock change, prompt) calls this: it re-derives what to do from the
+     * vault's actual state and never memoizes "already ran today".
      */
-    private fun maybeRollover(now: Long) {
-        val todayKey = java.time.LocalDate.now().toString()
-        if (lastRolloverDayKey == todayKey) return
-        val dayStart = localDayStart(now)
-        if (now < dayStart + vault.rolloverHour() * 60_000L) return
-        if (performRollover()) lastRolloverDayKey = todayKey
+    private fun maybeRollover(reason: String) {
+        if (!vault.isConfigured()) return
+        if (rolloverJob?.isActive == true) return
+        rolloverJob = scope.launch(Dispatchers.IO) { ensureRollover(reason) }
     }
 
-    private fun performRollover(): Boolean {
-        if (!vault.isConfigured()) return false
-        val todayName = vault.todayFileName()
-        if (!vault.hasToday()) {
-            Log.i(TAG, "rollover: creating $todayName from template")
-            if (!vault.createTodayFromTemplate()) {
-                Log.w(TAG, "rollover: failed to create $todayName")
-                return false
-            }
+    private suspend fun ensureRollover(reason: String): RolloverResult {
+        val result = try {
+            rollover.ensureToday()
+        } catch (e: Exception) {
+            Log.w(TAG, "rollover ($reason) threw", e)
+            RolloverResult.Failed(e.message ?: e::class.simpleName ?: "exception")
         }
-        val todayContent = vault.readToday() ?: run {
-            Log.w(TAG, "rollover: cannot read $todayName")
-            return false
-        }
-        val previousName = ObsidianNotes.latestEarlierDailyNote(
-            vault.listDailyNoteNames(),
-            todayName,
-            vault.filenameFormat(),
-        ) ?: run {
-            Log.i(TAG, "rollover: no earlier daily note before $todayName")
-            return true
-        }
-        val previousContent = vault.readNote(previousName) ?: run {
-            Log.w(TAG, "rollover: cannot read previous $previousName")
-            return true
-        }
-        val plan = ObsidianNotes.planRollover(todayContent, previousContent) ?: run {
-            Log.i(TAG, "rollover: nothing to carry from $previousName to $todayName")
-            return true
-        }
-        Log.i(TAG, "rollover: carrying ${plan.carriedTasks.size} tasks from $previousName to $todayName")
-        if (!vault.writeToday(plan.updatedToday)) {
-            Log.w(TAG, "rollover: failed to write $todayName")
-            return false
-        }
-        val verify = vault.readToday() ?: return false
-        if (ObsidianNotes.parse(verify).carryOverTasks.size < plan.carriedTasks.size) {
-            Log.w(TAG, "rollover: verify failed for $todayName")
-            return false
-        }
-        if (!vault.writeNote(previousName, plan.updatedPrevious)) {
-            Log.w(TAG, "rollover: failed to update previous $previousName")
-            return false
-        }
-        Log.i(TAG, "rollover: complete $previousName -> $todayName")
-        return true
+        Log.i(TAG, "rollover ($reason): $result")
+        return result
     }
-
-    private fun localDayStart(now: Long): Long =
-        java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     private class OverlayWindow(
         private val context: Context,

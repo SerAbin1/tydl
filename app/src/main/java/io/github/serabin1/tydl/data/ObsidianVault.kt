@@ -3,21 +3,21 @@ package io.github.serabin1.tydl.data
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import io.github.serabin1.tydl.domain.obsidian.DailyNoteVault
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.time.LocalDateTime
 
 /**
  * Reads and writes Tydl's Obsidian daily notes through the Storage Access Framework. The vault
  * folder is picked once by the user and remembered as a content URI; before that, or when the
  * vault is missing/unreadable, the guard falls back to the plain free-text prompt.
  */
-class ObsidianVault(private val context: Context) {
+class ObsidianVault(private val context: Context) : DailyNoteVault {
 
     private val settingsStore = ObsidianSettingsStore(context)
     private val settings get() = settingsStore.load()
 
-    fun isConfigured(): Boolean = settings.vaultUri != null
+    override fun isConfigured(): Boolean = settings.vaultUri != null
 
     fun hasToday(): Boolean = todayDocument() != null
 
@@ -32,15 +32,13 @@ class ObsidianVault(private val context: Context) {
         return writeDocument(document, content)
     }
 
-    fun writeNote(name: String, content: String): Boolean {
+    override fun writeNote(name: String, content: String): Boolean {
         val document = findFile(name) ?: return false
         return writeDocument(document, content)
     }
 
-    fun createTodayFromTemplate(): Boolean = createFromTemplate(todayFileName())
-
     /** Ensures [name] exists with the template contents. Idempotent: an existing file is untouched. */
-    fun createFromTemplate(name: String): Boolean {
+    override fun createFromTemplate(name: String): Boolean {
         if (findFile(name) != null) return true
         val templateContent = readTemplate() ?: return false
         val tree = vaultTree() ?: return false
@@ -70,19 +68,17 @@ class ObsidianVault(private val context: Context) {
         return true
     }
 
-    /** The hour of the day (0-23) after which the next day's note rolls over. */
-    fun rolloverHour(): Int = settings.rolloverHour
-
-    fun filenameFormat(): String = settings.filenameFormat
+    /** The user-configured daily-note filename pattern, e.g. DD-MM-YYYY. */
+    override fun filenameFormat(): String = settings.filenameFormat
 
     fun taskGate(): io.github.serabin1.tydl.domain.obsidian.TaskGate = settings.taskGate
 
-    fun listDailyNoteNames(): List<String> {
+    override fun listNoteNames(): List<String> {
         val tree = vaultTree() ?: return emptyList()
         return tree.listFiles().mapNotNull { if (!it.isDirectory) it.name else null }
     }
 
-    fun readNote(name: String): String? {
+    override fun readNote(name: String): String? {
         val file = findFile(name) ?: return null
         return context.contentResolver.openInputStream(file.uri)?.use { stream ->
             String(stream.readBytes(), Charsets.UTF_8)
@@ -125,13 +121,15 @@ class ObsidianVault(private val context: Context) {
         return writeToday(ObsidianNotes.withReflection(content, note))
     }
 
-    fun todayFileName(now: java.time.LocalDateTime = java.time.LocalDateTime.now()): String {
+    fun todayFileName(now: LocalDateTime = LocalDateTime.now()): String {
         val current = settings
         return ObsidianNotes.dailyNoteName(
             current.filenameFormat,
             ObsidianNotes.effectiveDate(now, current.rolloverHour),
         )
     }
+
+    override fun noteNameFor(now: LocalDateTime): String = todayFileName(now)
 
     private fun vaultTree(): DocumentFile? {
         val vaultUri = settings.vaultUri ?: return null
