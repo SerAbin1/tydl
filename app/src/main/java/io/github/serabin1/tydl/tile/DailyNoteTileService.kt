@@ -9,8 +9,6 @@ import android.service.quicksettings.TileService
 import io.github.serabin1.tydl.R
 import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.obsidian.ObsidianUris
-import io.github.serabin1.tydl.domain.log.LogTag
-import io.github.serabin1.tydl.log.TydlLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,8 +18,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * Opens the daily note that is current by Tydl's rollover hour, not by the calendar day.
- * The date-to-URI logic lives in the pure domain; this service only reads settings, ensures the
- * file exists (via the vault's own settings read), and launches Obsidian.
+ * The date-to-URI logic lives in the pure domain; this service only reads settings and launches
+ * Obsidian. It deliberately does not create the note: the guard owns creation and rollover, and
+ * a missing note should fail visibly rather than be invented by a tile tap.
  */
 class DailyNoteTileService : TileService() {
 
@@ -41,12 +40,7 @@ class DailyNoteTileService : TileService() {
     override fun onClick() {
         super.onClick()
         scope.launch {
-            val name = withContext(Dispatchers.IO) {
-                val name = vault.todayFileName()
-                val created = vault.createFromTemplate(name)
-                TydlLog.i(LogTag.VAULT, "tile: prepared $name (created=$created)")
-                name
-            }
+            val name = withContext(Dispatchers.IO) { vault.todayFileName() }
             openInObsidian(ObsidianUris.openNote(name))
         }
     }
