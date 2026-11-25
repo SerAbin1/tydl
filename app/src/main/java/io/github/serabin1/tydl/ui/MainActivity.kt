@@ -47,13 +47,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,7 +66,10 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import io.github.serabin1.tydl.data.GuardStore
+import io.github.serabin1.tydl.data.DailyStatsStore
+import io.github.serabin1.tydl.domain.DailyStats
 import io.github.serabin1.tydl.domain.GuardState
+import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.domain.log.LogEntry
 import io.github.serabin1.tydl.domain.log.LogFormat
 import io.github.serabin1.tydl.guard.GuardService
@@ -94,6 +100,7 @@ class MainActivity : ComponentActivity() {
     private var earlyEnd by mutableStateOf(false)
     private lateinit var obsidianVault: ObsidianVault
     private lateinit var settingsStore: ObsidianSettingsStore
+    private lateinit var dailyStatsStore: DailyStatsStore
     private var obsidianSettings by mutableStateOf(ObsidianSettings.defaults())
     private var showSettings by mutableStateOf(false)
     private var showLogs by mutableStateOf(false)
@@ -139,6 +146,7 @@ class MainActivity : ComponentActivity() {
         GuardService.start(this)
         obsidianVault = ObsidianVault(this)
         settingsStore = ObsidianSettingsStore(this)
+        dailyStatsStore = DailyStatsStore(this)
         obsidianSettings = settingsStore.load()
         fallback = fallbackFrom(intent)
         setContent {
@@ -160,6 +168,8 @@ class MainActivity : ComponentActivity() {
 
                     showSettings -> SettingsScreen(
                         settings = obsidianSettings,
+                        dailyStats = dailyStatsStore.loadToday(),
+                        dailyStatsStore = dailyStatsStore,
                         onBack = { showSettings = false },
                         onPickVault = { vaultPickerLauncher.launch(null) },
                         onPickTemplate = { templatePickerLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
@@ -666,6 +676,8 @@ private fun MainScreen(
 @Composable
 private fun SettingsScreen(
     settings: ObsidianSettings,
+    dailyStats: DailyStats,
+    dailyStatsStore: DailyStatsStore,
     onBack: () -> Unit,
     onPickVault: () -> Unit,
     onPickTemplate: () -> Unit,
@@ -673,6 +685,13 @@ private fun SettingsScreen(
     onViewLogs: () -> Unit,
     onSettingsChange: (ObsidianSettings) -> Unit,
 ) {
+    var autoDeleteDays by remember { mutableStateOf(settings.dailyStatsAutoDeleteEveryNDays.toString()) }
+    var deleteSaturday by remember { mutableStateOf(settings.dailyStatsAutoDeleteSaturday) }
+    var deleteSunday by remember { mutableStateOf(settings.dailyStatsAutoDeleteSunday) }
+    var radiusText by remember { mutableStateOf(settings.radiusMeters.toString()) }
+    // Local copy so "Clear" can refresh the card without relying on a settings change to recompose.
+    var stats by remember { mutableStateOf(dailyStats) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -759,6 +778,168 @@ private fun SettingsScreen(
         }
 
         Spacer(Modifier.height(32.dp))
+        Text("BEHAVIOUR", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = settings.awayModeEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(awayModeEnabled = it)) },
+            )
+            Column {
+                Text("Away mode", style = MaterialTheme.typography.bodyMedium, color = Foam)
+                Text("Silent when outside home radius", style = MaterialTheme.typography.bodySmall, color = Mist)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        if (settings.awayModeEnabled) {
+            SetupCard(
+                title = "Set home to current location",
+                body = "Location capture is not wired yet; it ships with Away mode. The radius below is saved.",
+                action = "Set",
+                onClick = { /* location picking handled by Away mode; stubbed for now */ },
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = radiusText,
+                onValueChange = { v ->
+                    radiusText = v.filter(Char::isDigit)
+                    val r = radiusText.toIntOrNull()
+                    if (r != null && r in 50..5000) onSettingsChange(settings.copy(radiusMeters = r))
+                },
+                label = { Text("Away radius (meters)") },
+                supportingText = { Text("Hysteresis: ~300 m in, ~400 m out") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = settings.gravitasEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(gravitasEnabled = it)) },
+            )
+            Column {
+                Text("Gravitas screen", style = MaterialTheme.typography.bodyMedium, color = Foam)
+                Text("Quote and reflections before a session starts", style = MaterialTheme.typography.bodySmall, color = Mist)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = settings.dailyStatsEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(dailyStatsEnabled = it)) },
+            )
+            Column {
+                Text("Daily stats", style = MaterialTheme.typography.bodyMedium, color = Foam)
+                Text("Per-day usage record stored on device", style = MaterialTheme.typography.bodySmall, color = Mist)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = settings.sleepTrackingEnabled,
+                enabled = settings.dailyStatsEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(sleepTrackingEnabled = it)) },
+            )
+            Column {
+                Text("Sleep tracking", style = MaterialTheme.typography.bodyMedium, color = Foam)
+                Text("Detects sleep from screen-off gaps", style = MaterialTheme.typography.bodySmall, color = Mist)
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        if (settings.dailyStatsEnabled) {
+            Text("DAILY STATS", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
+            Spacer(Modifier.height(8.dp))
+
+            SetupCard(
+                title = "Today (${stats.date})",
+                body = "Sessions: ${stats.sessions}  •  ${stats.totalMinutes} min  •  " +
+                    "Extensions: ${stats.extensionsCount} (${stats.extensionsMinutes} min)  •  " +
+                    "Tasks done: ${stats.tasksDone}  •  Unlocks: ${stats.unlocks}" +
+                    if (stats.sleepStart != null) "\nSleep: ${relativeSleep(stats)}" else "",
+                action = "Clear",
+                onClick = {
+                    dailyStatsStore.clear(stats.date)
+                    stats = dailyStatsStore.loadToday()
+                },
+            )
+            Spacer(Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = autoDeleteDays,
+                onValueChange = {
+                    autoDeleteDays = it
+                    val n = it.filter(Char::isDigit).toIntOrNull() ?: 0
+                    onSettingsChange(settings.copy(
+                        dailyStatsAutoDeleteEveryNDays = n,
+                        dailyStatsAutoDeleteSaturday = deleteSaturday,
+                        dailyStatsAutoDeleteSunday = deleteSunday,
+                    ))
+                },
+                label = { Text("Auto-delete stats after N days (0 = off)") },
+                supportingText = { Text("Or choose specific weekdays below") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = deleteSaturday,
+                    onCheckedChange = { deleteSaturday = it;
+                        onSettingsChange(settings.copy(
+                            dailyStatsAutoDeleteEveryNDays = autoDeleteDays.filter(Char::isDigit).toIntOrNull() ?: 0,
+                            dailyStatsAutoDeleteSaturday = it,
+                            dailyStatsAutoDeleteSunday = deleteSunday,
+                        ))
+                    },
+                )
+                Text("Auto-delete on Saturdays", style = MaterialTheme.typography.bodySmall, color = Foam)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = deleteSunday,
+                    onCheckedChange = { deleteSunday = it;
+                        onSettingsChange(settings.copy(
+                            dailyStatsAutoDeleteEveryNDays = autoDeleteDays.filter(Char::isDigit).toIntOrNull() ?: 0,
+                            dailyStatsAutoDeleteSaturday = deleteSaturday,
+                            dailyStatsAutoDeleteSunday = it,
+                        ))
+                    },
+                )
+                Text("Auto-delete on Sundays", style = MaterialTheme.typography.bodySmall, color = Foam)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         Text("DIAGNOSTICS", style = MaterialTheme.typography.labelSmall, letterSpacing = 3.sp, color = Mist)
         Spacer(Modifier.height(8.dp))
         SetupCard(
@@ -769,6 +950,13 @@ private fun SettingsScreen(
         )
         Spacer(Modifier.height(40.dp))
     }
+}
+
+private fun relativeSleep(stats: DailyStats): String {
+    val start = stats.sleepStart ?: return ""
+    val wake = stats.wakeTime ?: start
+    val minutes = ((wake - start) / Session.MINUTE_MS).toInt()
+    return "$minutes min"
 }
 
 @Composable

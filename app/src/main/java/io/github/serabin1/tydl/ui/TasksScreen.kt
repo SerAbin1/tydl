@@ -31,6 +31,8 @@ import io.github.serabin1.tydl.ui.theme.Tide
 @Composable
 fun TasksScreen(
     tasks: List<ObsidianTask>,
+    todayTasksDone: Int? = null,
+    yesterdayTasksDone: Int? = null,
     onTask: (ObsidianTask) -> Unit,
     onSomethingElse: () -> Unit,
 ) {
@@ -50,7 +52,11 @@ fun TasksScreen(
             letterSpacing = 6.sp,
             color = Tide,
         )
-        Spacer(Modifier.height(36.dp))
+        if (todayTasksDone != null) {
+            Spacer(Modifier.height(12.dp))
+            TasksStatsLine(todayTasksDone = todayTasksDone, yesterdayTasksDone = yesterdayTasksDone)
+        }
+        Spacer(Modifier.height(24.dp))
         tasks.forEach { task ->
             OutlinedButton(
                 onClick = { onTask(task) },
@@ -76,4 +82,32 @@ fun TasksScreen(
         }
         Spacer(Modifier.height(40.dp))
     }
+}
+
+/**
+ * "Finished x tasks today, y more than yesterday's z" — or the sad-puppy line when today trails
+ * yesterday. When yesterday's data is missing the comparison is hidden (never shown as 0), per the
+ * safety rules.
+ */
+@Composable
+private fun TasksStatsLine(todayTasksDone: Int, yesterdayTasksDone: Int?) {
+    val text = when {
+        yesterdayTasksDone == null ->
+            "Finished $todayTasksDone task${if (todayTasksDone == 1) "" else "s"} today."
+
+        todayTasksDone > yesterdayTasksDone -> {
+            val more = todayTasksDone - yesterdayTasksDone
+            "Finished $todayTasksDone tasks today, $more more than yesterday's $yesterdayTasksDone."
+        }
+
+        todayTasksDone == yesterdayTasksDone ->
+            "Finished $todayTasksDone tasks today, same as yesterday's $yesterdayTasksDone."
+
+        else -> "\uD83D\uDC36 Finished $todayTasksDone tasks today, fewer than yesterday's $yesterdayTasksDone."
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = Mist,
+    )
 }

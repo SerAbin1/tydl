@@ -7,7 +7,8 @@ package io.github.serabin1.tydl.domain
  * 3 AM phone check — are ignored so they can't corrupt the night's sleep. No polling: the events
  * come from the existing SCREEN_OFF / SCREEN_ON broadcasts the guard already receives.
  *
- * The sleep day is attributed to the day the screen went off.
+ * The period is reported as-is; the caller picks the day it belongs to. Tydl stores it under the
+ * wake day so it appears as "last night" on that day's screens.
  */
 object SleepTracker {
 

@@ -263,6 +263,86 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `random suggestion appends one backlog task not already shown`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+            - [ ] Routine 2
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+
+            ---
+
+            -
+        """.trimIndent())
+
+        // Routine fills the three suggestions; the random pick (index 2) is Backlog 3, not shown.
+        val result = ObsidianNotes.suggestionsWithRandom(
+            note,
+            TaskGate.HARD,
+            randomBacklogIndex = 2,
+        ).map { it.text }
+
+        assertEquals(listOf("Routine 1", "Routine 2", "Backlog 3"), result)
+    }
+
+    @Test
+    fun `random suggestion is not duplicated when already among the suggestions`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+
+            ---
+
+            -
+        """.trimIndent())
+
+        // SOFT gate shows both backlog tasks; the random pick (Backlog 1) is already present.
+        val result = ObsidianNotes.suggestionsWithRandom(
+            note,
+            TaskGate.SOFT,
+            randomBacklogIndex = 0,
+        ).map { it.text }
+
+        assertEquals(listOf("Backlog 1", "Backlog 2"), result)
+    }
+
+    @Test
+    fun `random suggestion is a no-op without a backlog or index`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+
+            ---
+
+            -
+
+            -
+        """.trimIndent())
+
+        assertEquals(
+            listOf("Routine 1"),
+            ObsidianNotes.suggestionsWithRandom(note, randomBacklogIndex = null).map { it.text },
+        )
+        assertEquals(
+            listOf("Routine 1"),
+            ObsidianNotes.suggestionsWithRandom(note, randomBacklogIndex = 0).map { it.text },
+        )
+    }
+
+    @Test
     fun `carry over tasks are the unchecked backlog tasks`() {
         val content = """
             Today, 22-11-2026

@@ -20,6 +20,36 @@ class DailyStatsStore(context: Context) {
         return load(date)
     }
 
+    /** Records that a session started today. */
+    fun recordSessionStart(minutes: Int, now: Long = System.currentTimeMillis()) {
+        val stats = loadToday(now).withSessionStarted(minutes)
+        save(stats)
+    }
+
+    /** Records that an extension was applied today. */
+    fun recordExtension(minutes: Int, now: Long = System.currentTimeMillis()) {
+        val stats = loadToday(now).withExtensionAdded(minutes)
+        save(stats)
+    }
+
+    /** Records that a task was completed today. */
+    fun recordTaskDone(now: Long = System.currentTimeMillis()) {
+        val stats = loadToday(now).withTaskDone()
+        save(stats)
+    }
+
+    /** Records that an unlock was observed today. */
+    fun recordUnlock(now: Long = System.currentTimeMillis()) {
+        val stats = loadToday(now).withUnlock()
+        save(stats)
+    }
+
+    /** Records today's sleep period. */
+    fun recordSleep(sleepStart: Long, wakeTime: Long, now: Long = System.currentTimeMillis()) {
+        val stats = loadToday(now).withSleep(sleepStart, wakeTime)
+        save(stats)
+    }
+
     /** Loads the stats for [date]. */
     fun load(date: String): DailyStats {
         val raw = prefs.getString(keyFor(date), null)
@@ -40,6 +70,14 @@ class DailyStatsStore(context: Context) {
         } else {
             editor.remove(keyFor(date))
         }
+        editor.apply()
+    }
+
+    /** Removes the given [dates] in one commit, used by the auto-delete policy. */
+    fun clearDates(dates: List<String>) {
+        if (dates.isEmpty()) return
+        val editor = prefs.edit()
+        dates.forEach { editor.remove(keyFor(it)) }
         editor.apply()
     }
 

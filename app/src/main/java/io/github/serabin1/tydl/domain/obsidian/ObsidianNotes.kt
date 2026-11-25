@@ -143,6 +143,28 @@ object ObsidianNotes {
         }
     }
 
+    /**
+     * The R&T screen task list: the usual [suggestions] plus one extra task picked at random from
+     * the backlog, so a routine day still surfaces an unrelated task. The random pick is passed in
+     * as [randomBacklogIndex] (already in `0 until backlog.size`) so the rule stays pure and
+     * testable; the shell supplies a real random index.
+     *
+     * Returns the suggestions with the random backlog task appended when it is not already shown.
+     */
+    fun suggestionsWithRandom(
+        note: ObsidianNote,
+        gate: TaskGate = TaskGate.HARD,
+        limit: Int = MAX_SUGGESTIONS,
+        randomBacklogIndex: Int?,
+    ): List<ObsidianTask> {
+        val base = suggestions(note, gate, limit)
+        val backlog = note.carryOverTasks.filter { !it.checked }
+        if (backlog.isEmpty() || randomBacklogIndex == null) return base
+        val index = ((randomBacklogIndex % backlog.size) + backlog.size) % backlog.size
+        val extra = backlog[index]
+        return if (base.any { it.text == extra.text }) base else base + extra
+    }
+
     /** Human-facing task text: wikilink alias, link text, or plain text. `[[Project]]: task` shows as "Project: task". */
     fun display(task: ObsidianTask): String {
         val text = task.text

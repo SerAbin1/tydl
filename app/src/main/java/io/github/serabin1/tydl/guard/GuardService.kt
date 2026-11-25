@@ -28,14 +28,19 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.serabin1.tydl.data.GuardStore
+import io.github.serabin1.tydl.data.DailyStatsStore
+import io.github.serabin1.tydl.data.ObsidianSettingsStore
 import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.DoneOutcome
+import io.github.serabin1.tydl.domain.Gravitas
 import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
 import io.github.serabin1.tydl.domain.Reflections
 import io.github.serabin1.tydl.domain.Session
+import io.github.serabin1.tydl.domain.SleepTracker
+import io.github.serabin1.tydl.domain.StatsRetention
 import io.github.serabin1.tydl.domain.describe
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteRollover
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
@@ -45,6 +50,7 @@ import io.github.serabin1.tydl.domain.log.LogTag
 import io.github.serabin1.tydl.log.TydlLog
 import io.github.serabin1.tydl.ui.DoneScreen
 import io.github.serabin1.tydl.ui.ExpiryScreen
+import io.github.serabin1.tydl.ui.GravitasScreen
 import io.github.serabin1.tydl.ui.MainActivity
 import io.github.serabin1.tydl.ui.PromptScreen
 import io.github.serabin1.tydl.ui.TasksScreen
@@ -72,6 +78,7 @@ class GuardService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var store: GuardStore
+    private lateinit var dailyStatsStore: DailyStatsStore
     private lateinit var keyguard: KeyguardManager
     private lateinit var power: PowerManager
     private var state = GuardState()
@@ -82,6 +89,7 @@ class GuardService : Service() {
     private var expiryOverlay: OverlayWindow? = null
     private var doneOverlay: OverlayWindow? = null
     private var tasksOverlay: OverlayWindow? = null
+    private var gravitasOverlay: OverlayWindow? = null
     private var keyguardPollJob: Job? = null
 
     /** Tasks picked from the vault for the current prompt, if the vault is configured. */
@@ -96,6 +104,13 @@ class GuardService : Service() {
     private var rolloverJob: Job? = null
 
     private lateinit var vault: ObsidianVault
+
+    /**
+     * A bounded buffer of recent screen on/off events, used to compute overnight sleep. Capped so
+     * a long-running process never grows it without bound. Only kept when sleep tracking is on.
+     */
+    private val screenEvents = ArrayDeque<SleepTracker.ScreenEvent>()
+    private val sleepLock = Any()
 
     /** Interrupts the deadline loop when something other than the clock changes what to wait for. */
     private val wakeSignal = Channel<Unit>(Channel.CONFLATED)
@@ -113,6 +128,7 @@ class GuardService : Service() {
                 Intent.ACTION_SCREEN_ON -> {
                     val locked = keyguard.isKeyguardLocked
                     TydlLog.i(LogTag.UNLOCK, "SCREEN_ON (keyguardLocked=$locked)")
+                    recordScreenEvent(screenOn = true)
                     maybeRollover("screen on")
                     if (!locked) {
                         cancelKeyguardPoll("screen on unlocked")
@@ -126,6 +142,7 @@ class GuardService : Service() {
 
                 Intent.ACTION_SCREEN_OFF -> {
                     TydlLog.i(LogTag.UNLOCK, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
+                    recordScreenEvent(screenOn = false)
                     cancelKeyguardPoll("screen off")
                     handle(GuardEvent.ScreenOff(now()))
                     wakeSignal.trySend(Unit)
@@ -145,6 +162,7 @@ class GuardService : Service() {
         super.onCreate()
         running = true
         store = GuardStore(this)
+        dailyStatsStore = DailyStatsStore(this)
         keyguard = getSystemService(KeyguardManager::class.java)
         power = getSystemService(PowerManager::class.java)
         vault = ObsidianVault(this)
@@ -212,14 +230,20 @@ class GuardService : Service() {
         if (intent?.action == null) maybeRollover("service start")
         val command = intent ?: return START_STICKY
         when (command.action) {
-            ACTION_START -> handle(
-                GuardEvent.Start(
-                    reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" },
-                    minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES),
-                    now = now(),
-                    task = command.getStringExtra(EXTRA_TASK),
-                ),
-            )
+            ACTION_START -> {
+                val minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES)
+                if (settingsStore.load().dailyStatsEnabled) {
+                    dailyStatsStore.recordSessionStart(minutes, now())
+                }
+                handle(
+                    GuardEvent.Start(
+                        reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" },
+                        minutes = minutes,
+                        now = now(),
+                        task = command.getStringExtra(EXTRA_TASK),
+                    ),
+                )
+            }
 
             ACTION_END -> handle(GuardEvent.End)
             ACTION_EXTEND -> extendSession(
@@ -246,6 +270,7 @@ class GuardService : Service() {
         hideExpiry()
         hideDone()
         hideTasks()
+        hideGravitas()
         try {
             unregisterReceiver(unlockReceiver)
         } catch (e: IllegalArgumentException) {
@@ -265,7 +290,29 @@ class GuardService : Service() {
         }
         lastUnlockAt = at
         store.saveLastUnlock(at)
+        if (settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordUnlock(at)
         handle(GuardEvent.Unlocked(at))
+    }
+
+    private val settingsStore by lazy { ObsidianSettingsStore(this) }
+
+    /** Feeds a screen on/off into the sleep buffer and recomputes sleep when a gap completes. */
+    private fun recordScreenEvent(screenOn: Boolean) {
+        val settings = settingsStore.load()
+        if (!settings.dailyStatsEnabled || !settings.sleepTrackingEnabled) return
+        val at = now()
+        val sleep = synchronized(sleepLock) {
+            screenEvents.addLast(SleepTracker.ScreenEvent(at, screenOn))
+            while (screenEvents.size > SCREEN_EVENT_CAP) screenEvents.removeFirst()
+            SleepTracker.computeSleep(screenEvents.toList())
+        }
+        if (sleep != null) {
+            dailyStatsStore.recordSleep(sleep.sleepStart, sleep.wakeTime, at)
+            TydlLog.i(
+                LogTag.SESSION,
+                "sleep detected: ${(sleep.wakeTime - sleep.sleepStart) / 60_000} min",
+            )
+        }
     }
 
     /** Polls the keyguard after a locked SCREEN_ON until it unlocks or times out. */
@@ -361,16 +408,91 @@ class GuardService : Service() {
             promptOverlay = showOverlay { overlay ->
                 TydlTheme {
                     PromptScreen(initialReason = initialReason, onStart = { reason, minutes ->
-                        startSession(this@GuardService, reason, minutes, taskText)
-                        pendingTask = null
-                        overlay.remove()
                         promptOverlay = null
+                        val settings = settingsStore.load()
+                        if (settings.gravitasEnabled && Gravitas.shouldShow(minutes)) {
+                            showGravitas(reason, minutes, taskText)
+                        } else {
+                            startSession(this@GuardService, reason, minutes, taskText)
+                            pendingTask = null
+                        }
+                        overlay.remove()
                     })
                 }
             }
             TydlLog.i(LogTag.PROMPT, "overlay shown")
         }
     }
+
+    /**
+     * Shows the Gravitas overlay, then starts the session when its countdown elapses. Not
+     * skippable: the overlay has no skip control and owns the flow until it finishes.
+     */
+    private fun showGravitas(reason: String, minutes: Int, taskText: String?) {
+        if (!Settings.canDrawOverlays(this)) {
+            // No overlay: skip Gravitas rather than block the session on a notification.
+            startSession(this, reason, minutes, taskText)
+            pendingTask = null
+            return
+        }
+        scope.launch {
+            val (quote, yesterdayReflections, todayFinished, sleep) =
+                withContext(Dispatchers.IO) { loadGravitasContent() }
+            hideGravitas()
+            gravitasOverlay = showOverlay { overlay ->
+                TydlTheme {
+                    GravitasScreen(
+                        requestedMinutes = minutes,
+                        quote = quote,
+                        yesterdayReflections = yesterdayReflections,
+                        todayFinishedTasks = todayFinished,
+                        lastNightSleep = sleep,
+                        onFinished = {
+                            startSession(this@GuardService, reason, minutes, taskText)
+                            pendingTask = null
+                            overlay.remove()
+                            gravitasOverlay = null
+                        },
+                    )
+                }
+            }
+            TydlLog.i(LogTag.SESSION, "gravitas overlay shown ($minutes min)")
+        }
+    }
+
+    /** The four Gravitas content pieces, read off the main thread. */
+    private fun loadGravitasContent(): GravitasContent {
+        val quote = vault.readTemplate()?.let { ObsidianNotes.templateQuote(it) } ?: ""
+        val yesterdayReflections = runCatching {
+            val names = vault.listNoteNames()
+            val format = vault.filenameFormat()
+            val todayName = vault.todayFileName()
+            val prevName = ObsidianNotes.latestEarlierDailyNote(names, todayName, format)
+            prevName?.let { vault.readNote(it) }?.let { ObsidianNotes.parse(it).reflection }
+        }.getOrNull()
+        val todayFinished = runCatching {
+            vault.readToday()?.let { ObsidianNotes.parse(it) }
+                ?.routineTasks?.filter { it.checked }?.map { ObsidianNotes.display(it) }
+                ?: emptyList()
+        }.getOrNull() ?: emptyList()
+        val settings = settingsStore.load()
+        val sleep = if (settings.dailyStatsEnabled && settings.sleepTrackingEnabled) {
+            dailyStatsStore.loadToday().let { stats ->
+                stats.sleepStart?.let { start ->
+                    val wake = stats.wakeTime ?: start
+                    "${(wake - start) / 60_000} min"
+                }
+            }
+        } else null
+        return GravitasContent(quote, yesterdayReflections, todayFinished, sleep)
+    }
+
+    private data class GravitasContent(
+        val quote: String,
+        val yesterdayReflections: String?,
+        val todayFinished: List<String>,
+        val sleep: String?,
+    )
 
     private fun loadSuggestedTasks(): List<ObsidianTask> {
         if (!vault.isConfigured()) {
@@ -386,9 +508,13 @@ class GuardService : Service() {
             TydlLog.w(LogTag.TASKS, "failed to read $today")
             return emptyList()
         }
-        val suggestions = ObsidianNotes.suggestions(
-            ObsidianNotes.parse(content, today),
+        val note = ObsidianNotes.parse(content, today)
+        val backlog = note.carryOverTasks.filter { !it.checked }
+        val randomIndex = if (backlog.isNotEmpty()) java.util.Random().nextInt(backlog.size) else null
+        val suggestions = ObsidianNotes.suggestionsWithRandom(
+            note,
             vault.taskGate(),
+            randomBacklogIndex = randomIndex,
         )
         TydlLog.i(
             LogTag.TASKS,
@@ -399,10 +525,15 @@ class GuardService : Service() {
 
     private fun showTasks(tasks: List<ObsidianTask>, onTask: (ObsidianTask) -> Unit) {
         hideTasks()
+        val statsEnabled = settingsStore.load().dailyStatsEnabled
+        val todayDone = if (statsEnabled) dailyStatsStore.loadToday().tasksDone else null
+        val yesterdayDone = if (statsEnabled) yesterdayTasksDone() else null
         tasksOverlay = showOverlay { overlay ->
             TydlTheme {
                 TasksScreen(
                     tasks = tasks,
+                    todayTasksDone = todayDone,
+                    yesterdayTasksDone = yesterdayDone,
                     onTask = { task ->
                         suggestedTasks = emptyList()
                         onTask(task)
@@ -421,9 +552,28 @@ class GuardService : Service() {
         }
     }
 
+    /** The ISO date key for yesterday, matching [DailyStatsStore]'s date format. */
+    private fun yesterdayDateKey(): String =
+        java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+            .minusDays(1)
+            .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+
+    /** Yesterday's tasks-done, or null when there's no usable record (never shown as 0). */
+    private fun yesterdayTasksDone(): Int? {
+        val key = yesterdayDateKey()
+        val stats = dailyStatsStore.load(key)
+        val hasData = stats.sessions > 0 || stats.tasksDone > 0 || stats.unlocks > 0
+        return if (hasData) stats.tasksDone else null
+    }
+
     private fun hideTasks() {
         tasksOverlay?.remove()
         tasksOverlay = null
+    }
+
+    private fun hideGravitas() {
+        gravitasOverlay?.remove()
+        gravitasOverlay = null
     }
 
     /** Checks the picked task off in today's note when the user confirms the session is done. */
@@ -431,6 +581,7 @@ class GuardService : Service() {
         val taskText = state.selectedTask ?: return
         scope.launch(Dispatchers.IO) {
             val done = vault.completeTask(taskText)
+            if (done && settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordTaskDone()
             TydlLog.i(LogTag.SESSION, "task check-off done=$done")
         }
     }
@@ -454,7 +605,10 @@ class GuardService : Service() {
         val applied = state.session != null &&
             before != null &&
             state.session!!.extensionsUsed == before.extensionsUsed + 1
-        if (applied) appendReflection(Reflections.extension(safeMinutes, reason))
+        if (applied) {
+            appendReflection(Reflections.extension(safeMinutes, reason))
+            if (settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordExtension(safeMinutes)
+        }
     }
 
     private fun showExpiry() = whenUnlocked("expiry") {
@@ -611,9 +765,26 @@ class GuardService : Service() {
      * vault's actual state and never memoizes "already ran today".
      */
     private fun maybeRollover(reason: String) {
+        pruneDailyStats()
         if (!vault.isConfigured()) return
         if (rolloverJob?.isActive == true) return
         rolloverJob = scope.launch(Dispatchers.IO) { ensureRollover(reason) }
+    }
+
+    /** Applies the auto-delete policy; a no-op once the stored dates are inside the window. */
+    private fun pruneDailyStats() {
+        val settings = settingsStore.load()
+        if (!settings.dailyStatsEnabled) return
+        val toDelete = StatsRetention.datesToDelete(
+            dates = dailyStatsStore.dates(),
+            today = java.time.LocalDate.now(java.time.ZoneId.systemDefault()),
+            everyNDays = settings.dailyStatsAutoDeleteEveryNDays,
+            deleteSaturday = settings.dailyStatsAutoDeleteSaturday,
+            deleteSunday = settings.dailyStatsAutoDeleteSunday,
+        )
+        if (toDelete.isEmpty()) return
+        dailyStatsStore.clearDates(toDelete)
+        TydlLog.i(LogTag.SERVICE, "daily stats auto-delete: ${toDelete.size} day(s)")
     }
 
     private suspend fun ensureRollover(reason: String): RolloverResult {
@@ -714,6 +885,8 @@ class GuardService : Service() {
         private const val MAX_UNLOCK_ATTEMPTS = 3
         private const val KEYGUARD_POLL_INTERVAL_MS = 500L
         private const val KEYGUARD_POLL_TIMEOUT_MS = 30_000L
+        /** Keep ~2 days of screen events so overnight sleep can be recomputed across midnight. */
+        private const val SCREEN_EVENT_CAP = 256
 
         fun start(context: Context) = send(context, Intent(context, GuardService::class.java))
 
