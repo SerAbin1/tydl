@@ -12,6 +12,6 @@ class ReflectionsTest {
 
     @Test
     fun `extension minutes are clamped to the supported range`() {
-        assertEquals("Extended 180 min: a bit more time", Reflections.extension(999, "a bit more time"))
+        assertEquals("Extended 60 min: a bit more time", Reflections.extension(999, "a bit more time"))
     }
 }

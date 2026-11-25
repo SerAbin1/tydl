@@ -37,7 +37,7 @@ data class Session(
         const val MINUTE_MS = 60_000L
         const val DEFAULT_MINUTES = 5
         const val MIN_MINUTES = 1
-        const val MAX_MINUTES = 180
+        const val MAX_MINUTES = 60
         const val EXTENSION_MINUTES = 5
         const val MAX_EXTENSIONS = 2
 

@@ -119,7 +119,7 @@ object GuardEngine {
 
         is GuardEvent.Extend -> {
             val session = state.session
-            if (session != null && session.canExtend() && event.reason.isNotBlank()) {
+            if (session != null && session.canExtend() && Reasons.typed(event.reason) != null) {
                 val safeMinutes = event.minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
                 val dayStart = dayStart(event.now)
                 val reset = state.extensionsDayStart != dayStart

@@ -58,7 +58,7 @@ fun ExpiryScreen(
             extensionsTodayCount = extensionsTodayCount,
             extensionsTodayMinutes = extensionsTodayMinutes,
             quote = quote,
-            initialReason = session.reason,
+            initialReason = "",
             onExtend = { reason, minutes ->
                 onExtend(reason, minutes)
             },
