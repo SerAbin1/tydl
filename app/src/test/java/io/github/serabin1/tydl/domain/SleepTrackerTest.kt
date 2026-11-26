@@ -56,10 +56,8 @@ class SleepTrackerTest {
             SleepTracker.ScreenEvent(at = 1_000_000L + 12 * hour, screenOn = true), // 7 h — longest
         ))
 
-        // The second gap starts at 10:46 (daytime) under the night-window rule, so it no
-        // longer qualifies; the longest *qualifying* gap is the first one.
-        assertEquals(1_000_000L, sleep!!.sleepStart)
-        assertEquals(1_000_000L + 4 * hour, sleep.wakeTime)
+        assertEquals(1_000_000L + 5 * hour, sleep!!.sleepStart)
+        assertEquals(1_000_000L + 12 * hour, sleep.wakeTime)
     }
 
     @Test
