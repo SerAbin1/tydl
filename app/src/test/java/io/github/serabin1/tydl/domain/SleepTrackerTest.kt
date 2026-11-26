@@ -3,6 +3,8 @@ package io.github.serabin1.tydl.domain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class SleepTrackerTest {
 
@@ -54,8 +56,10 @@ class SleepTrackerTest {
             SleepTracker.ScreenEvent(at = 1_000_000L + 12 * hour, screenOn = true), // 7 h — longest
         ))
 
-        assertEquals(1_000_000L + 5 * hour, sleep!!.sleepStart)
-        assertEquals(1_000_000L + 12 * hour, sleep.wakeTime)
+        // The second gap starts at 10:46 (daytime) under the night-window rule, so it no
+        // longer qualifies; the longest *qualifying* gap is the first one.
+        assertEquals(1_000_000L, sleep!!.sleepStart)
+        assertEquals(1_000_000L + 4 * hour, sleep.wakeTime)
     }
 
     @Test
@@ -89,5 +93,17 @@ class SleepTrackerTest {
         ))
 
         assertEquals(SleepTracker.SleepPeriod(1_000_000L, 1_000_000L + 4 * hour), sleep)
+    }
+
+    @Test
+    fun `daytime screen-off gap is not sleep`() {
+        val start = ZonedDateTime.of(2026, 1, 1, 9, 30, 0, 0, ZoneId.systemDefault())
+            .toInstant().toEpochMilli()
+        val end = ZonedDateTime.of(2026, 1, 1, 16, 30, 0, 0, ZoneId.systemDefault())
+            .toInstant().toEpochMilli()
+        assertNull(SleepTracker.computeSleep(listOf(
+            SleepTracker.ScreenEvent(at = start, screenOn = false),
+            SleepTracker.ScreenEvent(at = end, screenOn = true),
+        )))
     }
 }

@@ -1,11 +1,15 @@
 package io.github.serabin1.tydl.domain
 
+import java.time.ZoneId
+
 /**
  * Pure sleep detection from screen on/off events.
  *
- * Sleep is the longest screen-off gap of at least [MIN_SLEEP_GAP_MS] (3 h). Short gaps — like a
- * 3 AM phone check — are ignored so they can't corrupt the night's sleep. No polling: the events
- * come from the existing SCREEN_OFF / SCREEN_ON broadcasts the guard already receives.
+ * Sleep is the longest screen-off gap of at least [MIN_SLEEP_GAP_MS] (3 h) whose start time falls
+ * in the night window 20:00–08:00. A long screen-off during the day (class, work, travel) is not
+ * sleep, so its start must be at night. Short gaps — like a 3 AM phone check — are ignored so
+ * they can't corrupt the night's sleep. No polling: the events come from the existing SCREEN_OFF /
+ * SCREEN_ON broadcasts the guard already receives.
  *
  * The period is reported as-is; the caller picks the day it belongs to. Tydl stores it under the
  * wake day so it appears as "last night" on that day's screens.
@@ -22,12 +26,14 @@ object SleepTracker {
     data class SleepPeriod(val sleepStart: Long, val wakeTime: Long)
 
     /**
-     * Finds the longest screen-off gap >= [MIN_SLEEP_GAP_MS] among [events].
+     * Finds the longest qualifying screen-off gap among [events].
      *
      * Events are sorted by time. A screen-off followed later by a screen-on forms a gap; gaps
-     * shorter than the minimum are discarded; the longest remaining gap is sleep.
+     * shorter than [MIN_SLEEP_GAP_MS] are discarded; gaps whose start time-of-day is outside
+     * 20:00–08:00 are discarded; the longest remaining gap is sleep.
      */
     fun computeSleep(events: List<ScreenEvent>): SleepPeriod? {
+        val zone = ZoneId.systemDefault()
         val sorted = events.sortedBy { it.at }
         val gaps = mutableListOf<SleepPeriod>()
 
@@ -45,7 +51,11 @@ object SleepTracker {
                 if (j < sorted.size) {
                     val on = sorted[j]
                     val gapMs = on.at - sorted[offIdx].at
-                    if (gapMs >= MIN_SLEEP_GAP_MS) {
+                    val startHour = java.time.Instant.ofEpochMilli(sorted[offIdx].at)
+                        .atZone(zone).hour
+                    // Night window: 20:00 (inclusive) .. 08:00 (exclusive).
+                    val nightStart = startHour >= 20 || startHour < 8
+                    if (gapMs >= MIN_SLEEP_GAP_MS && nightStart) {
                         gaps += SleepPeriod(sorted[offIdx].at, on.at)
                     }
                     i = j
