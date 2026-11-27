@@ -319,7 +319,7 @@ class ObsidianNotesTest {
     }
 
     @Test
-    fun `random suggestion picks from backlog tasks not already shown`() {
+    fun `random suggestion picks from backlog tasks not already shown for every gate`() {
         val note = ObsidianNotes.parse("""
             Today
 
@@ -339,24 +339,68 @@ class ObsidianNotesTest {
             -
         """.trimIndent())
 
-        // The first three are already shown by the SOFT gate. An index aimed at one of them
-        // must still surface an unseen task, rather than silently dropping the random pick.
-        val suggestionTexts = { index: Int ->
-            ObsidianNotes.suggestionsWithRandom(note, TaskGate.SOFT, randomBacklogIndex = index)
-                .map { it.text }
+        TaskGate.entries.forEach { gate ->
+            // The routine is done, so every gate shows the same first three backlog tasks. An
+            // index aimed at one of them must still surface an unseen task, whatever the gate.
+            val suggestionTexts = { index: Int ->
+                ObsidianNotes.suggestionsWithRandom(note, gate, randomBacklogIndex = index)
+                    .map { it.text }
+            }
+            assertEquals(
+                "$gate index=0",
+                listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 4"),
+                suggestionTexts(0),
+            )
+            assertEquals(
+                "$gate index=4",
+                listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 5"),
+                suggestionTexts(4),
+            )
+            assertEquals(
+                "$gate index=5",
+                listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 6"),
+                suggestionTexts(5),
+            )
         }
-        assertEquals(
-            listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 4"),
-            suggestionTexts(0),
-        )
-        assertEquals(
-            listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 5"),
-            suggestionTexts(4),
-        )
-        assertEquals(
-            listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 6"),
-            suggestionTexts(5),
-        )
+    }
+
+    @Test
+    fun `random suggestion appends an unseen backlog task for every gate with pending routine`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [ ] Routine 1
+            - [ ] Routine 2
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+            - [ ] Backlog 4
+            - [ ] Backlog 5
+            - [ ] Backlog 6
+
+            ---
+
+            -
+        """.trimIndent())
+        val backlogTexts = note.carryOverTasks.map { it.text }
+
+        TaskGate.entries.forEach { gate ->
+            val base = ObsidianNotes.suggestions(note, gate).map { it.text }
+            (backlogTexts.indices).forEach { index ->
+                val result = ObsidianNotes.suggestionsWithRandom(
+                    note, gate, randomBacklogIndex = index,
+                ).map { it.text }
+                val message = "$gate index=$index result=$result"
+                assertEquals(message, base.size + 1, result.size)
+                assertEquals(message, base, result.take(base.size))
+                assertTrue(message, result.last() in backlogTexts)
+                assertTrue(message, result.last() !in base)
+                assertEquals(message, result.size, result.toSet().size)
+            }
+        }
     }
 
     @Test
