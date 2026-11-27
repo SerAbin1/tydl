@@ -246,9 +246,11 @@ class GuardService : Service() {
                 val minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES)
                 val enteredReason = command.getStringExtra(EXTRA_REASON).orEmpty()
                 val taskText = command.getStringExtra(EXTRA_TASK)
-                // A picked task is already in the backlog; never write it back as a second task,
-                // even if an intent somehow carries both the task and the add-as-task flag.
-                val addAsTask = taskText == null && command.getBooleanExtra(EXTRA_ADD_AS_TASK, false)
+                // startSession only sets this flag for a typed reason, never for a picked task,
+                // so the reason cannot be written back as a duplicate. Unlike before it does not
+                // depend on taskText: a reason saved as a task is also the task this session
+                // remembers so it can be checked off when done.
+                val addAsTask = command.getBooleanExtra(EXTRA_ADD_AS_TASK, false)
                 if (settingsStore.load().dailyStatsEnabled) {
                     dailyStatsStore.recordSessionStart(minutes, now())
                 }
@@ -948,15 +950,19 @@ class GuardService : Service() {
             minutes: Int,
             taskText: String? = null,
             addAsTask: Boolean = false,
-        ) = send(
-            context,
-            base(context)
-                .setAction(ACTION_START)
-                .putExtra(EXTRA_REASON, reason)
-                .putExtra(EXTRA_MINUTES, minutes)
-                .putExtra(EXTRA_TASK, taskText)
-                .putExtra(EXTRA_ADD_AS_TASK, addAsTask),
-        )
+        ) {
+            // A picked task is already in the backlog; never write its reason back as a second task.
+            val reasonAsTask = addAsTask && taskText == null
+            send(
+                context,
+                base(context)
+                    .setAction(ACTION_START)
+                    .putExtra(EXTRA_REASON, reason)
+                    .putExtra(EXTRA_MINUTES, minutes)
+                    .putExtra(EXTRA_TASK, ObsidianNotes.sessionTask(taskText, reason, reasonAsTask))
+                    .putExtra(EXTRA_ADD_AS_TASK, reasonAsTask),
+            )
+        }
 
         /** Starts a session for a suggested task; the task text is remembered for completion. */
         fun startTask(context: Context, task: ObsidianTask) = startSession(

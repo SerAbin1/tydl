@@ -210,6 +210,17 @@ object ObsidianNotes {
         return null
     }
 
+    /** The exact form a reason takes when it is written as a task line, used for later matching. */
+    fun taskText(text: String): String = text.trim().replace(whitespaceRegex, " ")
+
+    /**
+     * The task a session remembers so its done screen can offer to check it off. A task picked
+     * from the backlog wins, even if the add flag is set; a typed reason that is saved as a new
+     * task becomes that task in the exact form the note stores, so checking it off works.
+     */
+    fun sessionTask(picked: String?, reason: String, addAsTask: Boolean): String? =
+        picked ?: if (addAsTask) taskText(reason).takeIf { it.isNotEmpty() } else null
+
     /**
      * Adds one new task to the CARRY-OVER (backlog) slot. Used when a reason entered in R&T is
      * marked as a task: the sentence becomes an unchecked line in today's note.
@@ -219,14 +230,14 @@ object ObsidianNotes {
      * whitespace is flattened so a pasted newline cannot break the markdown task line.
      */
     fun withTaskAdded(content: String, text: String): String {
-        val taskText = text.trim().replace(whitespaceRegex, " ")
-        if (taskText.isEmpty()) return content
+        val normalized = taskText(text)
+        if (normalized.isEmpty()) return content
         val alreadyPending = content.lineSequence().any { line ->
             val task = line.toTask()
-            task != null && !task.checked && task.text == taskText
+            task != null && !task.checked && task.text == normalized
         }
         if (alreadyPending) return content
-        return insertIntoCarryOver(content, listOf(ObsidianTask(taskText, checked = false)))
+        return insertIntoCarryOver(content, listOf(ObsidianTask(normalized, checked = false)))
     }
 
     /** Insert [tasks] into the CARRY-OVER slot, i.e. right after the first `---` anchor. */

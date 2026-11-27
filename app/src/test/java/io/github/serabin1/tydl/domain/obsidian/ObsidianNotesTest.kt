@@ -715,6 +715,43 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `a reason saved as a task becomes the session task in stored form`() {
+        val reason = "  Call the dentist\n tomorrow  morning "
+
+        assertEquals(
+            "Call the dentist tomorrow morning",
+            ObsidianNotes.sessionTask(null, reason, addAsTask = true),
+        )
+    }
+
+    @Test
+    fun `a picked task stays the session task even with the add flag`() {
+        val picked = "[[Tydl]]: Write the design doc"
+
+        assertEquals(
+            picked,
+            ObsidianNotes.sessionTask(picked, "Write the design doc", addAsTask = true),
+        )
+    }
+
+    @Test
+    fun `a plain or blank reason has no session task`() {
+        assertNull(ObsidianNotes.sessionTask(null, "Call the dentist", addAsTask = false))
+        assertNull(ObsidianNotes.sessionTask(null, "   ", addAsTask = true))
+    }
+
+    @Test
+    fun `a reason saved as a task can be checked off with its session task text`() {
+        val reason = "Call the dentist\ntomorrow  morning"
+        val withNewTask = ObsidianNotes.withTaskAdded(noteContent, reason)
+        val sessionTask = ObsidianNotes.sessionTask(null, reason, addAsTask = true)!!
+
+        val checked = ObsidianNotes.withTaskChecked(withNewTask, sessionTask)
+
+        assertTrue(checked.contains("- [x] Call the dentist tomorrow morning\n"))
+    }
+
+    @Test
     fun `adding an already pending task is a no-op`() {
         assertEquals(noteContent, ObsidianNotes.withTaskAdded(noteContent, "Buy groceries"))
     }
