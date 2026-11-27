@@ -81,6 +81,7 @@ object ObsidianNotes {
     }
 
     private val taskRegex = Regex("""^\s*[-*]\s\[([ xX])\]\s*(.+)$""")
+    private val whitespaceRegex = Regex("\\s+")
 
     fun parse(content: String, filename: String = ""): ObsidianNote {
         val routineTasks = mutableListOf<ObsidianTask>()
@@ -207,6 +208,25 @@ object ObsidianNotes {
             if (quote.isNotEmpty()) return quote
         }
         return null
+    }
+
+    /**
+     * Adds one new task to the CARRY-OVER (backlog) slot. Used when a reason entered in R&T is
+     * marked as a task: the sentence becomes an unchecked line in today's note.
+     *
+     * Blank text and a task that is already pending are no-ops, so re-tapping Start cannot litter
+     * the backlog. A completed task with the same text may be added again as a new todo. Internal
+     * whitespace is flattened so a pasted newline cannot break the markdown task line.
+     */
+    fun withTaskAdded(content: String, text: String): String {
+        val taskText = text.trim().replace(whitespaceRegex, " ")
+        if (taskText.isEmpty()) return content
+        val alreadyPending = content.lineSequence().any { line ->
+            val task = line.toTask()
+            task != null && !task.checked && task.text == taskText
+        }
+        if (alreadyPending) return content
+        return insertIntoCarryOver(content, listOf(ObsidianTask(taskText, checked = false)))
     }
 
     /** Insert [tasks] into the CARRY-OVER slot, i.e. right after the first `---` anchor. */

@@ -125,6 +125,15 @@ class ObsidianVault(private val context: Context) : DailyNoteVault {
         return writeToday(updated)
     }
 
+    /** Adds a task to today's BACKLOG slot, e.g. a reason marked as a task in R&T. */
+    fun addTask(text: String): Boolean {
+        if (!isConfigured()) return false
+        val content = readToday() ?: return false
+        val updated = ObsidianNotes.withTaskAdded(content, text)
+        if (updated == content) return false
+        return writeToday(updated)
+    }
+
     /** Appends the how-it-went reflection, below any earlier reflection, above the closing quote. */
     fun appendReflection(note: String): Boolean {
         if (!isConfigured()) return false

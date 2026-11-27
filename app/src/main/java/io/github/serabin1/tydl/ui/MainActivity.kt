@@ -214,8 +214,13 @@ class MainActivity : ComponentActivity() {
                     }
 
                     fallback == GuardService.EXTRA_SHOW_PROMPT -> PromptScreen(
-                        onStart = { reason, minutes ->
-                            GuardService.startSession(this, reason, minutes)
+                        onStart = { reason, minutes, addAsTask ->
+                            GuardService.startSession(
+                                this,
+                                reason,
+                                minutes,
+                                addAsTask = addAsTask,
+                            )
                             fallback = null
                             refresh()
                         },

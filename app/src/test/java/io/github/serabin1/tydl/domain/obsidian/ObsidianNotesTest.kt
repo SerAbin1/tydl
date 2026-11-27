@@ -644,6 +644,62 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `adding a reason as a task puts an unchecked line in the backlog slot`() {
+        val updated = ObsidianNotes.withTaskAdded(noteContent, "Call the dentist tomorrow")
+
+        val note = ObsidianNotes.parse(updated, "22-11-2026.md")
+        assertEquals(listOf("Call the dentist tomorrow", "Buy groceries"), note.carryOverTasks.map { it.text })
+        assertEquals(false, note.carryOverTasks.first().checked)
+        assertEquals(listOf("Write the design doc", "Polish the settings screen"), note.routineTasks.map { it.text })
+        assertNull(note.reflection)
+        assertTrue(updated.contains("> [!quote] Consistency Before Greatness"))
+    }
+
+    @Test
+    fun `adding a task trims the reason text`() {
+        val updated = ObsidianNotes.withTaskAdded(noteContent, "  Call the dentist  ")
+
+        assertTrue(updated.contains("- [ ] Call the dentist\n"))
+    }
+
+    @Test
+    fun `adding a multiline reason writes one task line`() {
+        val updated = ObsidianNotes.withTaskAdded(noteContent, "Call the dentist\ntomorrow  morning")
+
+        assertTrue(updated.contains("- [ ] Call the dentist tomorrow morning\n"))
+        assertEquals(2, ObsidianNotes.parse(updated).carryOverTasks.size)
+    }
+
+    @Test
+    fun `adding an already pending task is a no-op`() {
+        assertEquals(noteContent, ObsidianNotes.withTaskAdded(noteContent, "Buy groceries"))
+    }
+
+    @Test
+    fun `adding a completed task again creates a new pending task`() {
+        val content = noteContent.replace("- [ ] Buy groceries", "- [x] Buy groceries")
+
+        val updated = ObsidianNotes.withTaskAdded(content, "Buy groceries")
+
+        val lines = updated.lines().filter { it.contains("Buy groceries") }.map { it.trim() }
+        assertEquals(2, lines.size)
+        assertTrue("- [ ] Buy groceries" in lines)
+        assertTrue("- [x] Buy groceries" in lines)
+    }
+
+    @Test
+    fun `adding a blank task leaves the note alone`() {
+        assertEquals(noteContent, ObsidianNotes.withTaskAdded(noteContent, "   "))
+    }
+
+    @Test
+    fun `adding a task to a note without a backlog anchor leaves it alone`() {
+        val content = "Today\n\n- [ ] Routine\n"
+
+        assertEquals(content, ObsidianNotes.withTaskAdded(content, "Call the dentist"))
+    }
+
+    @Test
     fun `rollover plan is null when today carry over is not empty`() {
         val today = """
             Today

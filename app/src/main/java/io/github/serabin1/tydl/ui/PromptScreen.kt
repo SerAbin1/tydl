@@ -2,6 +2,7 @@ package io.github.serabin1.tydl.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -26,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,10 +47,11 @@ fun promptMinutes(text: String): Int? =
 @Composable
 fun PromptScreen(
     initialReason: String = "",
-    onStart: (String, Int) -> Unit,
+    onStart: (String, Int, Boolean) -> Unit,
 ) {
     var reasonText by remember(initialReason) { mutableStateOf(initialReason) }
     var minutesText by remember { mutableStateOf("") }
+    var addAsTask by remember { mutableStateOf(false) }
 
     val reason = Reasons.accepted(reasonText, preFilled = initialReason.isNotBlank())
     val minutes = promptMinutes(minutesText)
@@ -92,6 +96,28 @@ fun PromptScreen(
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = addAsTask,
+                onCheckedChange = { addAsTask = it },
+            )
+            Column {
+                Text(
+                    text = "Also add this reason as a task",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Foam,
+                )
+                Text(
+                    text = "Saves it as an unchecked task in today's backlog.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Mist,
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = minutesText,
@@ -110,7 +136,7 @@ fun PromptScreen(
             onClick = {
                 val chosenReason = reason ?: return@Button
                 val chosenMinutes = minutes ?: return@Button
-                onStart(chosenReason, chosenMinutes)
+                onStart(chosenReason, chosenMinutes, addAsTask)
             },
             enabled = reason != null && minutes != null,
             shape = RoundedCornerShape(18.dp),

@@ -68,6 +68,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -105,6 +107,9 @@ class GuardService : Service() {
 
     /** One in-flight rollover at a time; the triggers are frequent and overlap by design. */
     private var rolloverJob: Job? = null
+
+    /** Serializes note read-modify-writes so reflections and reason-as-task both survive. */
+    private val noteWriteMutex = Mutex()
 
     private lateinit var vault: ObsidianVault
 
@@ -239,13 +244,14 @@ class GuardService : Service() {
         when (command.action) {
             ACTION_START -> {
                 val minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES)
+                val enteredReason = command.getStringExtra(EXTRA_REASON).orEmpty()
+                val addAsTask = command.getBooleanExtra(EXTRA_ADD_AS_TASK, false)
                 if (settingsStore.load().dailyStatsEnabled) {
                     dailyStatsStore.recordSessionStart(minutes, now())
                 }
-                val reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" }
                 handle(
                     GuardEvent.Start(
-                        reason = reason,
+                        reason = enteredReason.ifBlank { "Unspecified" },
                         minutes = minutes,
                         now = now(),
                         task = command.getStringExtra(EXTRA_TASK),
@@ -254,6 +260,16 @@ class GuardService : Service() {
                 // The session reason is written up front: matching it later to the nth checked
                 // task breaks when sessions overlap or tasks are checked off in another order.
                 state.session?.reason?.let { appendReflection(Reflections.session(it)) }
+                // A reason marked in R&T becomes a backlog task in today's note. The note write
+                // is off the main thread and never blocks or cancels the session. It shares the
+                // reflection write's lock so the two read-modify-writes cannot clobber each other.
+                if (addAsTask && enteredReason.isNotBlank()) {
+                    scope.launch(Dispatchers.IO) {
+                        ensureRollover("reason as task")
+                        val saved = noteWriteMutex.withLock { vault.addTask(enteredReason) }
+                        TydlLog.i(LogTag.TASKS, "reason saved as task=$saved")
+                    }
+                }
             }
 
             ACTION_END -> handle(GuardEvent.End)
@@ -426,13 +442,13 @@ class GuardService : Service() {
             val taskText = pendingTask?.text
             promptOverlay = showOverlay { overlay ->
                 TydlTheme {
-                    PromptScreen(initialReason = initialReason, onStart = { reason, minutes ->
+                    PromptScreen(initialReason = initialReason, onStart = { reason, minutes, addAsTask ->
                         promptOverlay = null
                         val settings = settingsStore.load()
                         if (settings.gravitasEnabled && Gravitas.shouldShow(minutes)) {
-                            showGravitas(reason, minutes, taskText)
+                            showGravitas(reason, minutes, taskText, addAsTask)
                         } else {
-                            startSession(this@GuardService, reason, minutes, taskText)
+                            startSession(this@GuardService, reason, minutes, taskText, addAsTask)
                             pendingTask = null
                         }
                         overlay.remove()
@@ -447,10 +463,15 @@ class GuardService : Service() {
      * Shows the Gravitas overlay, then starts the session when its countdown elapses. Not
      * skippable: the overlay has no skip control and owns the flow until it finishes.
      */
-    private fun showGravitas(reason: String, minutes: Int, taskText: String?) {
+    private fun showGravitas(
+        reason: String,
+        minutes: Int,
+        taskText: String?,
+        addAsTask: Boolean,
+    ) {
         if (!Settings.canDrawOverlays(this)) {
             // No overlay: skip Gravitas rather than block the session on a notification.
-            startSession(this, reason, minutes, taskText)
+            startSession(this, reason, minutes, taskText, addAsTask)
             pendingTask = null
             return
         }
@@ -467,7 +488,7 @@ class GuardService : Service() {
                         todayFinishedTasks = todayFinished,
                         lastNightSleep = sleep,
                         onFinished = {
-                            startSession(this@GuardService, reason, minutes, taskText)
+                            startSession(this@GuardService, reason, minutes, taskText, addAsTask)
                             pendingTask = null
                             overlay.remove()
                             gravitasOverlay = null
@@ -615,7 +636,7 @@ class GuardService : Service() {
     /** Appends the how-it-went reflection to today's note, if the vault is configured. */
     fun appendReflection(note: String) {
         scope.launch(Dispatchers.IO) {
-            val done = vault.appendReflection(note)
+            val done = noteWriteMutex.withLock { vault.appendReflection(note) }
             TydlLog.i(LogTag.SESSION, "reflection saved=$done")
         }
     }
@@ -905,6 +926,7 @@ class GuardService : Service() {
         private const val EXTRA_UNTIL = "until"
         private const val EXTRA_PROMPT_ON_END = "prompt_on_end"
         private const val EXTRA_TASK = "task"
+        private const val EXTRA_ADD_AS_TASK = "add_as_task"
         const val EXTRA_SHOW_PROMPT = "show_prompt"
         const val EXTRA_SHOW_EXPIRY = "show_expiry"
         private const val UNLOCK_DEBOUNCE_MS = 1_500L
@@ -917,13 +939,20 @@ class GuardService : Service() {
 
         fun start(context: Context) = send(context, Intent(context, GuardService::class.java))
 
-        fun startSession(context: Context, reason: String, minutes: Int, taskText: String? = null) = send(
+        fun startSession(
+            context: Context,
+            reason: String,
+            minutes: Int,
+            taskText: String? = null,
+            addAsTask: Boolean = false,
+        ) = send(
             context,
             base(context)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_REASON, reason)
                 .putExtra(EXTRA_MINUTES, minutes)
-                .putExtra(EXTRA_TASK, taskText),
+                .putExtra(EXTRA_TASK, taskText)
+                .putExtra(EXTRA_ADD_AS_TASK, addAsTask),
         )
 
         /** Starts a session for a suggested task; the task text is remembered for completion. */
