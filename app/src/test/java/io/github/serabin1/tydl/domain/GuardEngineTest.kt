@@ -249,8 +249,8 @@ class GuardEngineTest {
         val step = GuardEngine.reduce(GuardState(), GuardEvent.Start("Look something up", 7, t0))
 
         assertEquals("Look something up", step.state.session!!.reason)
-        assertEquals(7, step.state.session!!.requestedMinutes)
-        assertEquals(t0 + 7 * minute, step.state.session!!.endsAt)
+        assertEquals(7, step.state.session.requestedMinutes)
+        assertEquals(t0 + 7 * minute, step.state.session.endsAt)
         assertEquals(GuardEffect.None, step.effect)
     }
 
