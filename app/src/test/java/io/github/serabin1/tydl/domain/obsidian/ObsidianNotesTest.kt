@@ -319,6 +319,72 @@ class ObsidianNotesTest {
     }
 
     @Test
+    fun `random suggestion picks from backlog tasks not already shown`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [x] Routine 1
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+            - [ ] Backlog 4
+            - [ ] Backlog 5
+            - [ ] Backlog 6
+
+            ---
+
+            -
+        """.trimIndent())
+
+        // The first three are already shown by the SOFT gate. An index aimed at one of them
+        // must still surface an unseen task, rather than silently dropping the random pick.
+        val suggestionTexts = { index: Int ->
+            ObsidianNotes.suggestionsWithRandom(note, TaskGate.SOFT, randomBacklogIndex = index)
+                .map { it.text }
+        }
+        assertEquals(
+            listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 4"),
+            suggestionTexts(0),
+        )
+        assertEquals(
+            listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 5"),
+            suggestionTexts(4),
+        )
+        assertEquals(
+            listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 6"),
+            suggestionTexts(5),
+        )
+    }
+
+    @Test
+    fun `random suggestion is a no-op when every backlog task is already shown`() {
+        val note = ObsidianNotes.parse("""
+            Today
+
+            - [x] Routine 1
+
+            ---
+
+            - [ ] Backlog 1
+            - [ ] Backlog 2
+            - [ ] Backlog 3
+
+            ---
+
+            -
+        """.trimIndent())
+
+        assertEquals(
+            listOf("Backlog 1", "Backlog 2", "Backlog 3"),
+            ObsidianNotes.suggestionsWithRandom(note, TaskGate.SOFT, randomBacklogIndex = 2)
+                .map { it.text },
+        )
+    }
+
+    @Test
     fun `random suggestion is a no-op without a backlog or index`() {
         val note = ObsidianNotes.parse("""
             Today
