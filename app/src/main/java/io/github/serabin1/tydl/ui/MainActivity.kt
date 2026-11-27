@@ -69,7 +69,7 @@ import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.data.DailyStatsStore
 import io.github.serabin1.tydl.domain.DailyStats
 import io.github.serabin1.tydl.domain.GuardState
-import io.github.serabin1.tydl.domain.Session
+import io.github.serabin1.tydl.domain.SleepTracker
 import io.github.serabin1.tydl.domain.log.LogEntry
 import io.github.serabin1.tydl.domain.log.LogFormat
 import io.github.serabin1.tydl.guard.GuardService
@@ -955,8 +955,7 @@ private fun SettingsScreen(
 private fun relativeSleep(stats: DailyStats): String {
     val start = stats.sleepStart ?: return ""
     val wake = stats.wakeTime ?: start
-    val minutes = ((wake - start) / Session.MINUTE_MS).toInt()
-    return "$minutes min"
+    return SleepTracker.formatDuration(wake - start)
 }
 
 @Composable

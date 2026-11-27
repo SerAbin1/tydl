@@ -121,6 +121,7 @@ class GuardService : Service() {
             when (intent.action) {
                 Intent.ACTION_USER_PRESENT -> {
                     TydlLog.i(LogTag.UNLOCK, "USER_PRESENT (keyguardLocked=${keyguard.isKeyguardLocked})")
+                    recordScreenEvent(SleepTracker.ScreenState.UNLOCKED_ON)
                     cancelKeyguardPoll("user present")
                     maybeRollover("user present")
                     onUnlock()
@@ -129,7 +130,10 @@ class GuardService : Service() {
                 Intent.ACTION_SCREEN_ON -> {
                     val locked = keyguard.isKeyguardLocked
                     TydlLog.i(LogTag.UNLOCK, "SCREEN_ON (keyguardLocked=$locked)")
-                    recordScreenEvent(screenOn = true)
+                    recordScreenEvent(
+                        if (locked) SleepTracker.ScreenState.LOCKED_ON
+                        else SleepTracker.ScreenState.UNLOCKED_ON,
+                    )
                     maybeRollover("screen on")
                     if (!locked) {
                         cancelKeyguardPoll("screen on unlocked")
@@ -143,7 +147,7 @@ class GuardService : Service() {
 
                 Intent.ACTION_SCREEN_OFF -> {
                     TydlLog.i(LogTag.UNLOCK, "SCREEN_OFF (keyguardLocked=${keyguard.isKeyguardLocked})")
-                    recordScreenEvent(screenOn = false)
+                    recordScreenEvent(SleepTracker.ScreenState.OFF)
                     cancelKeyguardPoll("screen off")
                     handle(GuardEvent.ScreenOff(now()))
                     wakeSignal.trySend(Unit)
@@ -302,13 +306,13 @@ class GuardService : Service() {
 
     private val settingsStore by lazy { ObsidianSettingsStore(this) }
 
-    /** Feeds a screen on/off into the sleep buffer and recomputes sleep when a gap completes. */
-    private fun recordScreenEvent(screenOn: Boolean) {
+    /** Feeds a screen/keyguard event into the sleep buffer when it could complete a gap. */
+    private fun recordScreenEvent(state: SleepTracker.ScreenState) {
         val settings = settingsStore.load()
         if (!settings.dailyStatsEnabled || !settings.sleepTrackingEnabled) return
         val at = now()
         val sleep = synchronized(sleepLock) {
-            screenEvents.addLast(SleepTracker.ScreenEvent(at, screenOn))
+            screenEvents.addLast(SleepTracker.ScreenEvent(at, state))
             while (screenEvents.size > SCREEN_EVENT_CAP) screenEvents.removeFirst()
             SleepTracker.computeSleep(screenEvents.toList())
         }
@@ -316,7 +320,7 @@ class GuardService : Service() {
             dailyStatsStore.recordSleep(sleep.sleepStart, sleep.wakeTime, at)
             TydlLog.i(
                 LogTag.SESSION,
-                "sleep detected: ${(sleep.wakeTime - sleep.sleepStart) / 60_000} min",
+                "sleep detected: ${SleepTracker.formatDuration(sleep.wakeTime - sleep.sleepStart)}",
             )
         }
     }
@@ -331,6 +335,9 @@ class GuardService : Service() {
                 delay(KEYGUARD_POLL_INTERVAL_MS)
                 if (!keyguard.isKeyguardLocked) {
                     TydlLog.i(LogTag.UNLOCK, "keyguard poll success")
+                    // The keyguard came down while the screen was already lit; no SCREEN_ON or
+                    // USER_PRESENT may follow, so this is the wake event for sleep tracking.
+                    recordScreenEvent(SleepTracker.ScreenState.UNLOCKED_ON)
                     onUnlock()
                     return@launch
                 }
@@ -486,7 +493,7 @@ class GuardService : Service() {
             dailyStatsStore.loadToday().let { stats ->
                 stats.sleepStart?.let { start ->
                     val wake = stats.wakeTime ?: start
-                    "${(wake - start) / 60_000} min"
+                    SleepTracker.formatDuration(wake - start)
                 }
             }
         } else null
