@@ -1,6 +1,7 @@
 package io.github.serabin1.tydl.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -160,6 +161,87 @@ class GuardEngineTest {
         assertEquals(GuardEffect.None, unlocked(paused, t0 + minute).effect)
         assertEquals(GuardEffect.None, deadline(paused, t0 + 1 * minute).effect)
         assertEquals(GuardEffect.ShowPrompt, unlocked(paused, t0 + 15 * minute).effect)
+    }
+
+    private fun quickPaused() = GuardEngine.reduce(
+        GuardState(),
+        GuardEvent.Paused(QuickPause.until(t0), promptOnPauseEnd = true),
+    ).state
+
+    @Test
+    fun `a quick pause stays silent until its deadline`() {
+        val paused = quickPaused()
+
+        assertEquals(GuardEffect.None, unlocked(paused, t0 + minute).effect)
+        assertEquals(GuardEffect.None, deadline(paused, QuickPause.until(t0) - 1).effect)
+    }
+
+    @Test
+    fun `a quick pause prompts at its deadline, exactly once`() {
+        val paused = quickPaused()
+
+        val step = deadline(paused, QuickPause.until(t0))
+
+        assertEquals(GuardEffect.ShowPrompt, step.effect)
+        assertFalse(step.state.promptOnPauseEnd)
+        assertEquals(GuardEffect.None, deadline(step.state, QuickPause.until(t0) + 1).effect)
+    }
+
+    @Test
+    fun `an unlock during a quick pause keeps the pending prompt`() {
+        val paused = quickPaused()
+
+        val during = unlocked(paused, t0 + minute)
+
+        assertEquals(GuardEffect.None, during.effect)
+        assertEquals(paused, during.state)
+        val after = unlocked(paused, QuickPause.until(t0))
+        assertEquals(GuardEffect.ShowPrompt, after.effect)
+        assertFalse(after.state.promptOnPauseEnd)
+    }
+
+    @Test
+    fun `an ordinary pause does not prompt when its deadline arrives`() {
+        val until = QuickPause.until(t0)
+        val paused = GuardEngine.reduce(GuardState(), GuardEvent.Paused(until)).state
+
+        assertFalse(paused.promptOnPauseEnd)
+        assertEquals(GuardEffect.None, deadline(paused, until).effect)
+    }
+
+    @Test
+    fun `resuming clears a quick pause`() {
+        val resumed = GuardEngine.reduce(quickPaused(), GuardEvent.Paused(0L))
+
+        assertFalse(resumed.state.promptOnPauseEnd)
+        assertEquals(GuardEffect.None, deadline(resumed.state, QuickPause.until(t0)).effect)
+    }
+
+    @Test
+    fun `starting a session clears a pending quick prompt`() {
+        val step = GuardEngine.reduce(quickPaused(), GuardEvent.Start("check the time", 5, t0))
+
+        assertFalse(step.state.promptOnPauseEnd)
+    }
+
+    @Test
+    fun `ending a session clears a pending quick prompt`() {
+        val step = GuardEngine.reduce(quickPaused(), GuardEvent.End)
+
+        assertFalse(step.state.promptOnPauseEnd)
+    }
+
+    @Test
+    fun `a quick pause with a live session does not prompt at its end`() {
+        val state = started().copy(
+            pausedUntil = QuickPause.until(t0),
+            promptOnPauseEnd = true,
+        )
+
+        val step = deadline(state, QuickPause.until(t0))
+
+        assertEquals(GuardEffect.None, step.effect)
+        assertFalse(step.state.promptOnPauseEnd)
     }
 
     @Test

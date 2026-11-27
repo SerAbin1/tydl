@@ -35,6 +35,7 @@ fun TasksScreen(
     yesterdayTasksDone: Int? = null,
     onTask: (ObsidianTask) -> Unit,
     onSomethingElse: () -> Unit,
+    onJustTwoMinutes: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -79,6 +80,14 @@ fun TasksScreen(
             modifier = Modifier.fillMaxWidth().height(54.dp),
         ) {
             Text("Something else", style = MaterialTheme.typography.titleSmall, color = Tide)
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onJustTwoMinutes,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp),
+        ) {
+            Text("Just 2 mins", style = MaterialTheme.typography.titleSmall, color = Tide)
         }
         Spacer(Modifier.height(40.dp))
     }

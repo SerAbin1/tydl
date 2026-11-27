@@ -9,10 +9,10 @@ import java.net.URLEncoder
  */
 object GuardCodec {
 
-    private const val VERSION = "v5"
+    private const val VERSION = "v6"
     private const val NONE = "-"
     private const val SEPARATOR = "|"
-    private const val PARTS = 16
+    private const val PARTS = 17
 
     fun encode(state: GuardState): String {
         val session = state.session
@@ -33,6 +33,7 @@ object GuardCodec {
             state.completedSession?.requestedMinutes?.toString() ?: NONE,
             state.completedSession?.extensionsUsed?.toString() ?: NONE,
             state.selectedTask?.let { URLEncoder.encode(it, Charsets.UTF_8.name()) } ?: "",
+            state.promptOnPauseEnd.toString(),
         ).joinToString(SEPARATOR)
     }
 
@@ -49,6 +50,7 @@ object GuardCodec {
                 extensionsTodayMinutes = parts[8].toInt(),
                 extensionsDayStart = parts[9].toLong(),
                 selectedTask = parts[15].ifBlank { null }?.let { URLDecoder.decode(it, Charsets.UTF_8.name()) },
+                promptOnPauseEnd = parts[16].toBoolean(),
             )
         } catch (e: Exception) {
             GuardState()

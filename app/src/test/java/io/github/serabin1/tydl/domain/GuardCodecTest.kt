@@ -58,6 +58,22 @@ class GuardCodecTest {
     }
 
     @Test
+    fun `a quick pause flag round-trips`() {
+        val state = GuardState(
+            pausedUntil = t0 + 2 * minute,
+            promptOnPauseEnd = true,
+        )
+
+        assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
+    }
+
+    @Test
+    fun `an older state string decodes to the default state`() {
+        // No migration: a state written before the quick-pause flag is intentionally dropped.
+        assertEquals(GuardState(), GuardCodec.decode("v5" + "|".repeat(15)))
+    }
+
+    @Test
     fun `garbage decodes to an empty state`() {
         assertEquals(GuardState(), GuardCodec.decode("nonsense"))
         assertEquals(GuardState(), GuardCodec.decode(""))

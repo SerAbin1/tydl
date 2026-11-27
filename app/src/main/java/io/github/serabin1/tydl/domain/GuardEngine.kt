@@ -8,6 +8,8 @@ data class GuardState(
     val session: Session? = null,
     val completedSession: Session? = null,
     val pausedUntil: Long = 0L,
+    /** A "Just 2 mins" pause prompts when it ends; an ordinary pause stays silent until unlock. */
+    val promptOnPauseEnd: Boolean = false,
     val extensionsTodayCount: Int = 0,
     val extensionsTodayMinutes: Int = 0,
     val extensionsDayStart: Long = 0L,
@@ -50,7 +52,8 @@ sealed interface GuardEvent {
         val reason: String = "",
     ) : GuardEvent
 
-    data class Paused(val until: Long) : GuardEvent
+    /** Manual pause/resume leaves [promptOnPauseEnd] false; the quick 2-minute pause sets it. */
+    data class Paused(val until: Long, val promptOnPauseEnd: Boolean = false) : GuardEvent
 
     data class ScreenOff(val now: Long) : GuardEvent
 }
@@ -73,7 +76,8 @@ data class GuardStep(val state: GuardState, val effect: GuardEffect)
  * - Overrun session => show the expiry overlay. The unlock is the nag: every unlock while the
  *   session is overrun shows it again. There is no timer for it, because the overlay cannot be
  *   dismissed and the ongoing notification already counts the overrun live.
- * - Paused => silent, except that time keeps running.
+ * - Paused => silent, except that time keeps running. A quick pause is the one exception: it
+ *   asks for the reason again as soon as its deadline arrives, not on the next unlock.
  *
  * The guard never polls. [nextWakeAt] answers "when does the clock next matter?"; the shell arms
  * a single timer for that instant and sends [GuardEvent.DeadlineReached].
@@ -106,12 +110,18 @@ object GuardEngine {
                     now = event.now,
                 ),
                 selectedTask = event.task,
+                promptOnPauseEnd = false,
             ),
             GuardEffect.None,
         )
 
         GuardEvent.End -> GuardStep(
-            state.copy(session = null, completedSession = null, selectedTask = null),
+            state.copy(
+                session = null,
+                completedSession = null,
+                selectedTask = null,
+                promptOnPauseEnd = false,
+            ),
             GuardEffect.None,
         )
 
@@ -137,11 +147,20 @@ object GuardEngine {
             }
         }
 
-        is GuardEvent.Paused -> GuardStep(state.copy(pausedUntil = event.until), GuardEffect.None)
+        is GuardEvent.Paused -> GuardStep(
+            state.copy(
+                pausedUntil = event.until,
+                promptOnPauseEnd = event.promptOnPauseEnd,
+            ),
+            GuardEffect.None,
+        )
     }
 
     private fun onUnlocked(state: GuardState, now: Long): GuardStep {
         if (state.isPaused(now)) return GuardStep(state, GuardEffect.None)
+        if (state.promptOnPauseEnd && state.session == null) {
+            return GuardStep(state.copy(promptOnPauseEnd = false), GuardEffect.ShowPrompt)
+        }
         if (state.completedSession != null) {
             return GuardStep(state, GuardEffect.ShowDone)
         }
@@ -167,6 +186,13 @@ object GuardEngine {
 
     private fun onDeadlineReached(state: GuardState, now: Long): GuardStep {
         if (state.isPaused(now)) return GuardStep(state, GuardEffect.None)
+        if (state.promptOnPauseEnd) {
+            val cleared = state.copy(promptOnPauseEnd = false)
+            return GuardStep(
+                cleared,
+                if (cleared.session == null) GuardEffect.ShowPrompt else GuardEffect.None,
+            )
+        }
         val session = state.session ?: return GuardStep(state, GuardEffect.None)
         return if (session.isOverrun(now)) {
             GuardStep(state, GuardEffect.ShowExpiry)

@@ -37,6 +37,7 @@ import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
 import io.github.serabin1.tydl.domain.GuardEvent
 import io.github.serabin1.tydl.domain.GuardState
+import io.github.serabin1.tydl.domain.QuickPause
 import io.github.serabin1.tydl.domain.Reflections
 import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.domain.SleepTracker
@@ -250,7 +251,12 @@ class GuardService : Service() {
                 reason = command.getStringExtra(EXTRA_REASON).orEmpty(),
                 minutes = command.getIntExtra(EXTRA_MINUTES, Session.EXTENSION_MINUTES),
             )
-            ACTION_PAUSE -> handle(GuardEvent.Paused(command.getLongExtra(EXTRA_UNTIL, 0L)))
+            ACTION_PAUSE -> handle(
+                GuardEvent.Paused(
+                    until = command.getLongExtra(EXTRA_UNTIL, 0L),
+                    promptOnPauseEnd = command.getBooleanExtra(EXTRA_PROMPT_ON_END, false),
+                ),
+            )
             ACTION_UNLOCK -> {
                 TydlLog.i(LogTag.UNLOCK, "manual unlock requested")
                 onUnlock()
@@ -546,6 +552,15 @@ class GuardService : Service() {
                         overlay.remove()
                         tasksOverlay = null
                         showPromptForm()
+                    },
+                    onJustTwoMinutes = {
+                        suggestedTasks = emptyList()
+                        pendingTask = null
+                        overlay.remove()
+                        tasksOverlay = null
+                        hidePrompt()
+                        quickPause(this@GuardService)
+                        TydlLog.i(LogTag.SESSION, "just 2 mins requested")
                     },
                 )
             }
@@ -877,6 +892,7 @@ class GuardService : Service() {
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_MINUTES = "minutes"
         private const val EXTRA_UNTIL = "until"
+        private const val EXTRA_PROMPT_ON_END = "prompt_on_end"
         private const val EXTRA_TASK = "task"
         const val EXTRA_SHOW_PROMPT = "show_prompt"
         const val EXTRA_SHOW_EXPIRY = "show_expiry"
@@ -941,6 +957,15 @@ class GuardService : Service() {
         fun resume(context: Context) = send(
             context,
             base(context).setAction(ACTION_PAUSE).putExtra(EXTRA_UNTIL, 0L),
+        )
+
+        /** The R&T escape hatch: two quiet minutes, then the prompt comes back on its own. */
+        fun quickPause(context: Context) = send(
+            context,
+            base(context)
+                .setAction(ACTION_PAUSE)
+                .putExtra(EXTRA_UNTIL, QuickPause.until(System.currentTimeMillis()))
+                .putExtra(EXTRA_PROMPT_ON_END, true),
         )
 
         /** Diagnostics: run the unlock path without locking the phone. */

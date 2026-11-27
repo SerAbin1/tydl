@@ -20,6 +20,7 @@ class GuardDescriptionsTest {
         assertEquals("End", GuardEvent.End.describe())
         assertEquals("Extend(minutes=5)", GuardEvent.Extend(0, reason = "still writing the notes").describe())
         assertEquals("Paused", GuardEvent.Paused(1).describe())
+        assertEquals("Paused(quick)", GuardEvent.Paused(1, promptOnPauseEnd = true).describe())
         assertEquals("Resumed", GuardEvent.Paused(0).describe())
         assertEquals("ScreenOff", GuardEvent.ScreenOff(0).describe())
     }
