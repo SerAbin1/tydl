@@ -242,14 +242,18 @@ class GuardService : Service() {
                 if (settingsStore.load().dailyStatsEnabled) {
                     dailyStatsStore.recordSessionStart(minutes, now())
                 }
+                val reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" }
                 handle(
                     GuardEvent.Start(
-                        reason = command.getStringExtra(EXTRA_REASON).orEmpty().ifBlank { "Unspecified" },
+                        reason = reason,
                         minutes = minutes,
                         now = now(),
                         task = command.getStringExtra(EXTRA_TASK),
                     ),
                 )
+                // The session reason is written up front: matching it later to the nth checked
+                // task breaks when sessions overlap or tasks are checked off in another order.
+                state.session?.reason?.let { appendReflection(Reflections.session(it)) }
             }
 
             ACTION_END -> handle(GuardEvent.End)
@@ -618,7 +622,7 @@ class GuardService : Service() {
 
     /**
      * Extends a live session and, when the engine accepted it, appends the extension's reason to
-     * today's REFLECTION slot, so the note carries both the added time and why it was added.
+     * today's REFLECTION slot, naming the starting reason so the bullet stands on its own.
      */
     private fun extendSession(reason: String, minutes: Int) {
         val safeMinutes = minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
@@ -628,7 +632,7 @@ class GuardService : Service() {
             before != null &&
             state.session!!.extensionsUsed == before.extensionsUsed + 1
         if (applied) {
-            appendReflection(Reflections.extension(safeMinutes, reason))
+            appendReflection(Reflections.extension(safeMinutes, reason, before.reason))
             if (settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordExtension(safeMinutes)
         }
     }
