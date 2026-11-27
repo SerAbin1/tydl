@@ -14,6 +14,12 @@ object Reasons {
 
     fun picked(text: String): String? = text.trim().ifBlank { null }
 
+    /**
+     * Only a reason typed from "Something else" may become a new backlog task. A task picked in
+     * R&T is already in the backlog, so offering to save its reason again would duplicate it.
+     */
+    fun canAddAsTask(preFilled: Boolean): Boolean = !preFilled
+
     fun accepted(text: String, preFilled: Boolean): String? =
         typed(text) ?: if (preFilled) picked(text) else null
 

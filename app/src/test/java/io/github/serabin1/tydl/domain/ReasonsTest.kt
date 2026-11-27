@@ -36,4 +36,10 @@ class ReasonsTest {
     fun `a reason can stay pre-filled while the user adds words`() {
         assertEquals("read the late review notes", Reasons.accepted("read the late review notes", preFilled = true))
     }
+
+    @Test
+    fun `only a reason typed from scratch can be saved as a task`() {
+        assertEquals(false, Reasons.canAddAsTask(preFilled = true))
+        assertEquals(true, Reasons.canAddAsTask(preFilled = false))
+    }
 }

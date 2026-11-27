@@ -53,7 +53,9 @@ fun PromptScreen(
     var minutesText by remember { mutableStateOf("") }
     var addAsTask by remember { mutableStateOf(false) }
 
-    val reason = Reasons.accepted(reasonText, preFilled = initialReason.isNotBlank())
+    val preFilled = initialReason.isNotBlank()
+    val reason = Reasons.accepted(reasonText, preFilled = preFilled)
+    val canAddAsTask = Reasons.canAddAsTask(preFilled = preFilled)
     val minutes = promptMinutes(minutesText)
 
     Column(
@@ -96,26 +98,28 @@ fun PromptScreen(
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = addAsTask,
-                onCheckedChange = { addAsTask = it },
-            )
-            Column {
-                Text(
-                    text = "Also add this reason as a task",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Foam,
+        if (canAddAsTask) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = addAsTask,
+                    onCheckedChange = { addAsTask = it },
                 )
-                Text(
-                    text = "Saves it as an unchecked task in today's backlog.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Mist,
-                )
+                Column {
+                    Text(
+                        text = "Also add this reason as a task",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Foam,
+                    )
+                    Text(
+                        text = "Saves it as an unchecked task in today's backlog.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Mist,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -136,7 +140,7 @@ fun PromptScreen(
             onClick = {
                 val chosenReason = reason ?: return@Button
                 val chosenMinutes = minutes ?: return@Button
-                onStart(chosenReason, chosenMinutes, addAsTask)
+                onStart(chosenReason, chosenMinutes, canAddAsTask && addAsTask)
             },
             enabled = reason != null && minutes != null,
             shape = RoundedCornerShape(18.dp),

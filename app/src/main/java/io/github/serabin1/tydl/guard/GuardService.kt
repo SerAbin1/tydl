@@ -245,7 +245,10 @@ class GuardService : Service() {
             ACTION_START -> {
                 val minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES)
                 val enteredReason = command.getStringExtra(EXTRA_REASON).orEmpty()
-                val addAsTask = command.getBooleanExtra(EXTRA_ADD_AS_TASK, false)
+                val taskText = command.getStringExtra(EXTRA_TASK)
+                // A picked task is already in the backlog; never write it back as a second task,
+                // even if an intent somehow carries both the task and the add-as-task flag.
+                val addAsTask = taskText == null && command.getBooleanExtra(EXTRA_ADD_AS_TASK, false)
                 if (settingsStore.load().dailyStatsEnabled) {
                     dailyStatsStore.recordSessionStart(minutes, now())
                 }
@@ -254,7 +257,7 @@ class GuardService : Service() {
                         reason = enteredReason.ifBlank { "Unspecified" },
                         minutes = minutes,
                         now = now(),
-                        task = command.getStringExtra(EXTRA_TASK),
+                        task = taskText,
                     ),
                 )
                 // The session reason is written up front: matching it later to the nth checked
