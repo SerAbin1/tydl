@@ -2,15 +2,20 @@ package io.github.serabin1.tydl.data
 
 import android.content.Context
 import io.github.serabin1.tydl.domain.DailyStats
+import io.github.serabin1.tydl.domain.TydlDay
 
 /**
- * Persists [DailyStats] per day in SharedPreferences. One record per date, never parsed from
+ * Persists [DailyStats] per Tydl day in SharedPreferences. One record per date, never parsed from
  * Obsidian notes, so it survives deleted weekly notes.
  *
- * Serialisation is a single pipe-delimited string per date, so there are no extra dependencies
- * and no JSON library.
+ * The rollover hour is supplied by the caller (read fresh from settings on every lookup), so all
+ * records use the same day boundary as daily notes. Serialisation is a single pipe-delimited
+ * string per date, so there are no extra dependencies and no JSON library.
  */
-class DailyStatsStore(context: Context) {
+class DailyStatsStore(
+    context: Context,
+    private val rolloverHour: () -> Int,
+) {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -44,9 +49,9 @@ class DailyStatsStore(context: Context) {
         save(stats)
     }
 
-    /** Records today's sleep period. */
-    fun recordSleep(sleepStart: Long, wakeTime: Long, now: Long = System.currentTimeMillis()) {
-        val stats = loadToday(now).withSleep(sleepStart, wakeTime)
+    /** Records sleep on the Tydl day it woke up in, even when detected after rollover. */
+    fun recordSleep(sleepStart: Long, wakeTime: Long) {
+        val stats = load(dateKey(wakeTime)).withSleep(sleepStart, wakeTime)
         save(stats)
     }
 
@@ -124,12 +129,7 @@ class DailyStatsStore(context: Context) {
         }
     }
 
-    private fun dateKey(now: Long): String {
-        return java.time.Instant.ofEpochMilli(now)
-            .atZone(java.time.ZoneId.systemDefault())
-            .toLocalDate()
-            .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
-    }
+    private fun dateKey(at: Long): String = TydlDay.key(at, rolloverHour())
 
     private companion object {
         const val PREFS = "tydl_daily_stats"

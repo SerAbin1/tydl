@@ -1,5 +1,7 @@
 package io.github.serabin1.tydl.domain.obsidian
 
+import io.github.serabin1.tydl.domain.TydlDay
+
 /**
  * A task line from a daily note. The text is trimmed and the checkbox marker is stripped; the
  * indent is kept so a carried task can be written back indented.
@@ -49,10 +51,8 @@ object ObsidianNotes {
         date.format(dateFormatter(format)) + ".md"
 
     /** Effective note date: before rollover hour, the day still belongs to the previous date. */
-    fun effectiveDate(now: java.time.LocalDateTime, rolloverHour: Int): java.time.LocalDate {
-        val date = now.toLocalDate()
-        return if (now.hour < rolloverHour.coerceIn(0, 23)) date.minusDays(1) else date
-    }
+    fun effectiveDate(now: java.time.LocalDateTime, rolloverHour: Int): java.time.LocalDate =
+        TydlDay.of(now, rolloverHour)
 
     /** Parses a daily-note filename into its date, or null when it doesn't match the format. */
     fun parseDailyNoteDate(name: String, format: String): java.time.LocalDate? {

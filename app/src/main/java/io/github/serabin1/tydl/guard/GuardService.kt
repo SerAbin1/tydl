@@ -42,7 +42,9 @@ import io.github.serabin1.tydl.domain.Reflections
 import io.github.serabin1.tydl.domain.Session
 import io.github.serabin1.tydl.domain.SleepTracker
 import io.github.serabin1.tydl.domain.StatsRetention
+import io.github.serabin1.tydl.domain.TydlDay
 import io.github.serabin1.tydl.domain.describe
+import io.github.serabin1.tydl.domain.getTydlDay
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteRollover
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
 import io.github.serabin1.tydl.domain.obsidian.ObsidianTask
@@ -167,7 +169,7 @@ class GuardService : Service() {
         super.onCreate()
         running = true
         store = GuardStore(this)
-        dailyStatsStore = DailyStatsStore(this)
+        dailyStatsStore = DailyStatsStore(this) { settingsStore.load().rolloverHour }
         keyguard = getSystemService(KeyguardManager::class.java)
         power = getSystemService(PowerManager::class.java)
         vault = ObsidianVault(this)
@@ -317,7 +319,7 @@ class GuardService : Service() {
             SleepTracker.computeSleep(screenEvents.toList())
         }
         if (sleep != null) {
-            dailyStatsStore.recordSleep(sleep.sleepStart, sleep.wakeTime, at)
+            dailyStatsStore.recordSleep(sleep.sleepStart, sleep.wakeTime)
             TydlLog.i(
                 LogTag.SESSION,
                 "sleep detected: ${SleepTracker.formatDuration(sleep.wakeTime - sleep.sleepStart)}",
@@ -574,11 +576,9 @@ class GuardService : Service() {
         }
     }
 
-    /** The ISO date key for yesterday, matching [DailyStatsStore]'s date format. */
+    /** The ISO date key for the previous Tydl day, matching [DailyStatsStore]'s date format. */
     private fun yesterdayDateKey(): String =
-        java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-            .minusDays(1)
-            .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        TydlDay.previousKey(now(), settingsStore.load().rolloverHour)
 
     /** Yesterday's tasks-done, or null when there's no usable record (never shown as 0). */
     private fun yesterdayTasksDone(): Int? {
@@ -799,7 +799,7 @@ class GuardService : Service() {
         if (!settings.dailyStatsEnabled) return
         val toDelete = StatsRetention.datesToDelete(
             dates = dailyStatsStore.dates(),
-            today = java.time.LocalDate.now(java.time.ZoneId.systemDefault()),
+            today = getTydlDay(at = now(), rolloverHour = settings.rolloverHour),
             everyNDays = settings.dailyStatsAutoDeleteEveryNDays,
             deleteSaturday = settings.dailyStatsAutoDeleteSaturday,
             deleteSunday = settings.dailyStatsAutoDeleteSunday,

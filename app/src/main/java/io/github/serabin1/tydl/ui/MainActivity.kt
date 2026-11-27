@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -146,8 +147,8 @@ class MainActivity : ComponentActivity() {
         GuardService.start(this)
         obsidianVault = ObsidianVault(this)
         settingsStore = ObsidianSettingsStore(this)
-        dailyStatsStore = DailyStatsStore(this)
         obsidianSettings = settingsStore.load()
+        dailyStatsStore = DailyStatsStore(this) { obsidianSettings.rolloverHour }
         fallback = fallbackFrom(intent)
         setContent {
             TydlTheme {
@@ -691,6 +692,10 @@ private fun SettingsScreen(
     var radiusText by remember { mutableStateOf(settings.radiusMeters.toString()) }
     // Local copy so "Clear" can refresh the card without relying on a settings change to recompose.
     var stats by remember { mutableStateOf(dailyStats) }
+    // Changing the rollover hour can move "today" to a different stored record.
+    LaunchedEffect(settings.rolloverHour) {
+        stats = dailyStatsStore.loadToday()
+    }
 
     Column(
         modifier = Modifier
