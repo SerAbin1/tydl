@@ -292,6 +292,8 @@ class GuardService : Service() {
                 TydlLog.i(LogTag.UNLOCK, "manual unlock requested")
                 onUnlock()
             }
+            ACTION_COMPLETE_TASK -> completeTask()
+            ACTION_APPEND_REFLECTION -> appendReflection(command.getStringExtra(EXTRA_REFLECTION).orEmpty())
         }
         return START_STICKY
     }
@@ -632,7 +634,8 @@ class GuardService : Service() {
     fun completeTask() {
         val taskText = state.selectedTask ?: return
         scope.launch(Dispatchers.IO) {
-            val done = vault.completeTask(taskText)
+            ensureRollover("task check-off")
+            val done = noteWriteMutex.withLock { vault.completeTask(taskText) }
             if (done && settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordTaskDone()
             TydlLog.i(LogTag.SESSION, "task check-off done=$done")
         }
@@ -641,6 +644,7 @@ class GuardService : Service() {
     /** Appends the how-it-went reflection to today's note, if the vault is configured. */
     fun appendReflection(note: String) {
         scope.launch(Dispatchers.IO) {
+            ensureRollover("reflection")
             val done = noteWriteMutex.withLock { vault.appendReflection(note) }
             TydlLog.i(LogTag.SESSION, "reflection saved=$done")
         }
@@ -927,6 +931,9 @@ class GuardService : Service() {
         private const val ACTION_EXTEND = "io.github.serabin1.tydl.action.EXTEND"
         private const val ACTION_PAUSE = "io.github.serabin1.tydl.action.PAUSE"
         private const val ACTION_UNLOCK = "io.github.serabin1.tydl.action.UNLOCK"
+        private const val ACTION_COMPLETE_TASK = "io.github.serabin1.tydl.action.COMPLETE_TASK"
+        private const val ACTION_APPEND_REFLECTION = "io.github.serabin1.tydl.action.APPEND_REFLECTION"
+        private const val EXTRA_REFLECTION = "reflection"
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_MINUTES = "minutes"
         private const val EXTRA_UNTIL = "until"
@@ -1022,6 +1029,15 @@ class GuardService : Service() {
         fun simulateUnlock(context: Context) = send(
             context,
             base(context).setAction(ACTION_UNLOCK),
+        )
+
+        /** Checks the picked task off in today's note via the running service (mutex + rollover). */
+        fun completeTask(context: Context) = send(context, base(context).setAction(ACTION_COMPLETE_TASK))
+
+        /** Appends the how-it-went reflection via the running service (mutex + rollover). */
+        fun appendReflection(context: Context, note: String) = send(
+            context,
+            base(context).setAction(ACTION_APPEND_REFLECTION).putExtra(EXTRA_REFLECTION, note),
         )
 
         private fun base(context: Context) = Intent(context, GuardService::class.java)

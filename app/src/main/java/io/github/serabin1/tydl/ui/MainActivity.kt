@@ -190,7 +190,7 @@ class MainActivity : ComponentActivity() {
                                 session = session,
                                 task = guardState.selectedTask,
                                 onStartAnother = { note ->
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
+                                    GuardService.appendReflection(this, note)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     earlyEnd = false
@@ -198,10 +198,10 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onTaskFinished = {
                                     val task = guardState.selectedTask ?: return@EarlyEndScreen
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.completeTask(task) }
+                                    GuardService.completeTask(this)
                                 },
                                 onDone = { note ->
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
+                                    GuardService.appendReflection(this, note)
                                     GuardService.endAndLock(this)
                                     earlyEnd = false
                                     refresh()
@@ -235,10 +235,10 @@ class MainActivity : ComponentActivity() {
                                 task = guardState.selectedTask,
                                 onTaskFinished = {
                                     val task = guardState.selectedTask ?: return@DoneScreen
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.completeTask(task) }
+                                    GuardService.completeTask(this)
                                 },
                                 onDone = { note ->
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
+                                    GuardService.appendReflection(this, note)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
@@ -254,16 +254,16 @@ class MainActivity : ComponentActivity() {
                                 task = guardState.selectedTask,
                                 onTaskFinished = {
                                     val task = guardState.selectedTask ?: return@ExpiryScreen
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.completeTask(task) }
+                                    GuardService.completeTask(this)
                                 },
                                 onDone = { note ->
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
+                                    GuardService.appendReflection(this, note)
                                     GuardService.endAndLock(this)
                                     fallback = null
                                     refresh()
                                 },
                                 onStartAnother = { note ->
-                                    lifecycleScope.launch(Dispatchers.IO) { obsidianVault.appendReflection(note) }
+                                    GuardService.appendReflection(this, note)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
