@@ -11,7 +11,7 @@ data class GuardState(
     /** A "Just 2 mins" pause prompts when it ends; an ordinary pause stays silent until unlock. */
     val promptOnPauseEnd: Boolean = false,
     /** The task this session was started for, if any; set by task picks, cleared when done. */
-    val selectedTask: String? = null,
+    val selectedTask: PickedTask? = null,
 ) {
     fun isPaused(now: Long): Boolean = now < pausedUntil
 }
@@ -34,7 +34,7 @@ sealed interface GuardEvent {
         val reason: String,
         val minutes: Int,
         val now: Long,
-        val task: String? = null,
+        val task: PickedTask? = null,
     ) : GuardEvent
 
     data object End : GuardEvent

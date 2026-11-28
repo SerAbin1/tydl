@@ -15,7 +15,7 @@ class GuardDescriptionsTest {
         assertEquals("Start(minutes=5, task=no)", GuardEvent.Start("secret", 5, 0).describe())
         assertEquals(
             "Start(minutes=5, task=yes)",
-            GuardEvent.Start("secret", 5, 0, "private task").describe(),
+            GuardEvent.Start("secret", 5, 0, task = PickedTask(raw = "private task", display = "private task")).describe(),
         )
         assertEquals("End", GuardEvent.End.describe())
         assertEquals("Extend(minutes=5)", GuardEvent.Extend(0, reason = "still writing the notes").describe())
@@ -27,7 +27,7 @@ class GuardDescriptionsTest {
 
     @Test
     fun `start never leaks the reason or task text`() {
-        val text = GuardEvent.Start("secret reason", 5, 0, "secret task").describe()
+        val text = GuardEvent.Start("secret reason", 5, 0, task = PickedTask(raw = "secret task", display = "secret task")).describe()
 
         assertFalse(text.contains("secret"))
         assertTrue(text.contains("task=yes"))

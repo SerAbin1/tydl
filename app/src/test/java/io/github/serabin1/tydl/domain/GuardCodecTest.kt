@@ -20,7 +20,7 @@ class GuardCodecTest {
     fun `a full state round-trips`() {
         val state = GuardState(
             session = Session.start("check the build", 5, t0).extend(t0 + minute),
-            selectedTask = "[[Tydl]]: check the build",
+            selectedTask = PickedTask(raw = "[[Tydl]]: check the build", display = "[[Tydl]]: check the build"),
             pausedUntil = t0 + 30 * minute,
         )
 
@@ -29,7 +29,7 @@ class GuardCodecTest {
 
     @Test
     fun `a task session round-trips`() {
-        val state = GuardState(session = Session.start("Write the design doc", 5, t0), selectedTask = "Write the design doc")
+        val state = GuardState(session = Session.start("Write the design doc", 5, t0), selectedTask = PickedTask(raw = "Write the design doc", display = "Write the design doc"))
 
         assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
     }
@@ -38,7 +38,7 @@ class GuardCodecTest {
     fun `selected task with pipe round-trips`() {
         val state = GuardState(
             session = Session.start("BullMQ", 5, t0),
-            selectedTask = "[[System_Design/LLD/BullMQ|BullMQ]]",
+            selectedTask = PickedTask(raw = "[[System_Design/LLD/BullMQ|BullMQ]]", display = "BullMQ"),
         )
 
         assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))

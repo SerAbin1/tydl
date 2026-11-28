@@ -32,6 +32,7 @@ import io.github.serabin1.tydl.data.DailyStatsStore
 import io.github.serabin1.tydl.data.TydlSettingsStore
 import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.DoneOutcome
+import io.github.serabin1.tydl.domain.PickedTask
 import io.github.serabin1.tydl.domain.Gravitas
 import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
@@ -252,6 +253,7 @@ class GuardService : Service() {
                 val minutes = command.getIntExtra(EXTRA_MINUTES, Session.DEFAULT_MINUTES)
                 val enteredReason = command.getStringExtra(EXTRA_REASON).orEmpty()
                 val taskText = command.getStringExtra(EXTRA_TASK)
+                val taskDisplay = command.getStringExtra(EXTRA_TASK_DISPLAY)
                 // startSession only sets this flag for a typed reason, never for a picked task,
                 // so the reason cannot be written back as a duplicate. Unlike before it does not
                 // depend on taskText: a reason saved as a task is also the task this session
@@ -265,7 +267,7 @@ class GuardService : Service() {
                         reason = enteredReason.ifBlank { "Unspecified" },
                         minutes = minutes,
                         now = now(),
-                        task = taskText,
+                        task = taskText?.let { PickedTask(raw = it, display = taskDisplay ?: it) },
                     ),
                 )
                 // The session reason is written up front: matching it later to the nth checked
@@ -454,15 +456,16 @@ class GuardService : Service() {
             hideReasonTime()
             val initialReason = pendingTask?.let { ObsidianNotes.display(it) } ?: ""
             val taskText = pendingTask?.text
+            val taskDisplay = pendingTask?.let { ObsidianNotes.display(it) }
             reasonTimeOverlay = showOverlay { overlay ->
                 TydlTheme {
                     ReasonTimeScreen(initialReason = initialReason, onStart = { reason, minutes, addAsTask ->
                         reasonTimeOverlay = null
                         val settings = settingsStore.load()
                         if (settings.gravitasEnabled && Gravitas.shouldShow(minutes)) {
-                            showGravitas(reason, minutes, taskText, addAsTask)
+                            showGravitas(reason, minutes, taskText, taskDisplay, addAsTask)
                         } else {
-                            startSession(this@GuardService, reason, minutes, taskText, addAsTask)
+                            startSession(this@GuardService, reason, minutes, taskText, taskDisplay, addAsTask)
                             pendingTask = null
                         }
                         overlay.remove()
@@ -481,11 +484,12 @@ class GuardService : Service() {
         reason: String,
         minutes: Int,
         taskText: String?,
+        taskDisplay: String?,
         addAsTask: Boolean,
     ) {
         if (!Settings.canDrawOverlays(this)) {
             // No overlay: skip Gravitas rather than block the session on a notification.
-            startSession(this, reason, minutes, taskText, addAsTask)
+            startSession(this, reason, minutes, taskText, taskDisplay, addAsTask)
             pendingTask = null
             return
         }
@@ -502,7 +506,7 @@ class GuardService : Service() {
                         todayFinishedTasks = todayFinished,
                         lastNightSleep = sleep,
                         onFinished = {
-                            startSession(this@GuardService, reason, minutes, taskText, addAsTask)
+                            startSession(this@GuardService, reason, minutes, taskText, taskDisplay, addAsTask)
                             pendingTask = null
                             overlay.remove()
                             gravitasOverlay = null
@@ -648,7 +652,7 @@ class GuardService : Service() {
 
     /** Checks the picked task off in today's note when the user confirms the session is done. */
     fun completeTask() {
-        val taskText = state.selectedTask ?: return
+        val taskText = state.selectedTask?.raw ?: return
         scope.launch(Dispatchers.IO) {
             ensureRollover("task check-off")
             val done = noteWriteMutex.withLock { vault.completeTask(taskText) }
@@ -701,7 +705,7 @@ class GuardService : Service() {
             )
         } else {
             hideExpiry()
-            val task = state.selectedTask
+            val task = state.selectedTask?.raw
             val quote = vault.readTemplate()?.let { ObsidianNotes.templateQuote(it) } ?: "Consistency Before Greatness"
             expiryOverlay = showOverlay { overlay ->
                 TydlTheme {
@@ -752,7 +756,7 @@ class GuardService : Service() {
                 TydlTheme {
                     DoneScreen(
                         session = session,
-                        task = state.selectedTask,
+                        task = state.selectedTask?.raw,
                         onTaskFinished = { completeTask() },
                         onDone = { reflection ->
                             end(this@GuardService)
@@ -956,6 +960,7 @@ class GuardService : Service() {
         private const val EXTRA_UNTIL = "until"
         private const val EXTRA_PROMPT_ON_END = "prompt_on_end"
         private const val EXTRA_TASK = "task"
+        private const val EXTRA_TASK_DISPLAY = "task_display"
         private const val EXTRA_ADD_AS_TASK = "add_as_task"
         const val EXTRA_SHOW_REASON_TIME = "show_prompt"
         const val EXTRA_SHOW_EXPIRY = "show_expiry"
@@ -974,17 +979,20 @@ class GuardService : Service() {
             reason: String,
             minutes: Int,
             taskText: String? = null,
+            taskDisplay: String? = null,
             addAsTask: Boolean = false,
         ) {
             // A picked task is already in the backlog; never write its reason back as a second task.
             val reasonAsTask = addAsTask && taskText == null
+            val resolvedTask = ObsidianNotes.sessionTask(taskText, reason, reasonAsTask)
             send(
                 context,
                 base(context)
                     .setAction(ACTION_START)
                     .putExtra(EXTRA_REASON, reason)
                     .putExtra(EXTRA_MINUTES, minutes)
-                    .putExtra(EXTRA_TASK, ObsidianNotes.sessionTask(taskText, reason, reasonAsTask))
+                    .putExtra(EXTRA_TASK, resolvedTask)
+                    .putExtra(EXTRA_TASK_DISPLAY, taskDisplay ?: resolvedTask)
                     .putExtra(EXTRA_ADD_AS_TASK, reasonAsTask),
             )
         }
@@ -995,6 +1003,7 @@ class GuardService : Service() {
             ObsidianNotes.display(task),
             Session.DEFAULT_MINUTES,
             task.text,
+            ObsidianNotes.display(task),
         )
 
         fun end(context: Context) = send(context, base(context).setAction(ACTION_END))

@@ -280,10 +280,10 @@ class GuardEngineTest {
     fun `starting a task session records the task`() {
         val step = GuardEngine.reduce(
             GuardState(),
-            GuardEvent.Start("Write the design doc", 5, t0, task = "[[Tydl]]: Write the design doc"),
+            GuardEvent.Start("Write the design doc", 5, t0, task = PickedTask(raw = "[[Tydl]]: Write the design doc", display = "Write the design doc")),
         )
 
-        assertEquals("[[Tydl]]: Write the design doc", step.state.selectedTask)
+        assertEquals(PickedTask(raw = "[[Tydl]]: Write the design doc", display = "Write the design doc"), step.state.selectedTask)
         assertEquals("Write the design doc", step.state.session?.reason)
     }
 
@@ -291,7 +291,7 @@ class GuardEngineTest {
     fun `ending a task session clears the selected task`() {
         val started = GuardEngine.reduce(
             GuardState(),
-            GuardEvent.Start("Write the design doc", 5, t0, task = "Write the design doc"),
+            GuardEvent.Start("Write the design doc", 5, t0, task = PickedTask(raw = "Write the design doc", display = "Write the design doc")),
         )
         val ended = GuardEngine.reduce(started.state, GuardEvent.End)
 

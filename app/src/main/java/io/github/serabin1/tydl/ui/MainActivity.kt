@@ -193,7 +193,7 @@ class MainActivity : ComponentActivity() {
                         if (session != null) {
                             EarlyEndScreen(
                                 session = session,
-                                task = guardState.selectedTask,
+                                task = guardState.selectedTask?.raw,
                                 onStartAnother = { reflection ->
                                     GuardService.appendReflection(this, reflection)
                                     GuardService.end(this)
@@ -202,7 +202,7 @@ class MainActivity : ComponentActivity() {
                                     refresh()
                                 },
                                 onTaskFinished = {
-                                    val task = guardState.selectedTask ?: return@EarlyEndScreen
+                                    if (guardState.selectedTask == null) return@EarlyEndScreen
                                     GuardService.completeTask(this)
                                 },
                                 onDone = { reflection ->
@@ -237,9 +237,9 @@ class MainActivity : ComponentActivity() {
                         when {
                             completed != null -> DoneScreen(
                                 session = completed,
-                                task = guardState.selectedTask,
+                                task = guardState.selectedTask?.raw,
                                 onTaskFinished = {
-                                    val task = guardState.selectedTask ?: return@DoneScreen
+                                    if (guardState.selectedTask == null) return@DoneScreen
                                     GuardService.completeTask(this)
                                 },
                                 onDone = { reflection ->
@@ -256,9 +256,9 @@ class MainActivity : ComponentActivity() {
                                 now = System.currentTimeMillis(),
                                 extensionsTodayCount = dailyStatsStore.loadToday().extensionsCount,
                                 extensionsTodayMinutes = dailyStatsStore.loadToday().extensionsMinutes,
-                                task = guardState.selectedTask,
+                                task = guardState.selectedTask?.raw,
                                 onTaskFinished = {
-                                    val task = guardState.selectedTask ?: return@ExpiryScreen
+                                    if (guardState.selectedTask == null) return@ExpiryScreen
                                     GuardService.completeTask(this)
                                 },
                                 onDone = { reflection ->
