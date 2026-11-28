@@ -48,7 +48,7 @@ import io.github.serabin1.tydl.domain.describe
 import io.github.serabin1.tydl.domain.getTydlDay
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteRollover
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
-import io.github.serabin1.tydl.domain.obsidian.ObsidianTask
+import io.github.serabin1.tydl.domain.obsidian.Task
 import io.github.serabin1.tydl.domain.obsidian.RolloverResult
 import io.github.serabin1.tydl.domain.log.LogTag
 import io.github.serabin1.tydl.log.TydlLog
@@ -99,9 +99,9 @@ class GuardService : Service() {
     private var keyguardPollJob: Job? = null
 
     /** Tasks picked from the vault for the current prompt, if the vault is configured. */
-    private var suggestedTasks: List<ObsidianTask> = emptyList()
+    private var suggestedTasks: List<Task> = emptyList()
     /** A task the user tapped; pre-fills reason but keeps friction (time still required). */
-    private var pendingTask: ObsidianTask? = null
+    private var pendingTask: Task? = null
 
     /** Checked routine tasks in today's note (note is the record of truth); computed in loadSuggestedTasks. */
     private var todayFinishedCount: Int = 0
@@ -556,7 +556,7 @@ class GuardService : Service() {
         val sleep: String?,
     )
 
-    private fun loadSuggestedTasks(): List<ObsidianTask> {
+    private fun loadSuggestedTasks(): List<Task> {
         todayFinishedCount = 0
         yesterdayFinishedCount = null
         if (!vault.isConfigured()) {
@@ -601,7 +601,7 @@ class GuardService : Service() {
         ObsidianNotes.parse(content).routineTasks.count { it.checked }
     }.getOrNull()
 
-    private fun showTasks(tasks: List<ObsidianTask>, onTask: (ObsidianTask) -> Unit) {
+    private fun showTasks(tasks: List<Task>, onTask: (Task) -> Unit) {
         hideTasks()
         val statsEnabled = settingsStore.load().dailyStatsEnabled
         val todayDone = if (statsEnabled) todayFinishedCount else null
@@ -998,7 +998,7 @@ class GuardService : Service() {
         }
 
         /** Starts a session for a suggested task; the task text is remembered for completion. */
-        fun startTask(context: Context, task: ObsidianTask) = startSession(
+        fun startTask(context: Context, task: Task) = startSession(
             context,
             ObsidianNotes.display(task),
             Session.DEFAULT_MINUTES,

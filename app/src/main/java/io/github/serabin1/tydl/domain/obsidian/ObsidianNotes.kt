@@ -6,7 +6,7 @@ import io.github.serabin1.tydl.domain.TydlDay
  * A task line from a daily note. The text is trimmed and the checkbox marker is stripped; the
  * indent is kept so a carried task can be written back indented.
  */
-data class ObsidianTask(
+data class Task(
     val text: String,
     val checked: Boolean,
     val indent: Int = 0,
@@ -29,12 +29,12 @@ enum class TaskGate { HARD, SOFT, MIXED }
  */
 data class ObsidianNote(
     val filename: String,
-    val routineTasks: List<ObsidianTask>,
-    val carryOverTasks: List<ObsidianTask>,
+    val routineTasks: List<Task>,
+    val carryOverTasks: List<Task>,
     val reflection: String?,
 ) {
     /** Unchecked routine tasks still pending — the routine-first gate reads from here. */
-    val pendingRoutineTasks: List<ObsidianTask>
+    val pendingRoutineTasks: List<Task>
         get() = routineTasks.filter { !it.checked }
 }
 
@@ -81,8 +81,8 @@ object ObsidianNotes {
     private val whitespaceRegex = Regex("\\s+")
 
     fun parse(content: String, filename: String = ""): ObsidianNote {
-        val routineTasks = mutableListOf<ObsidianTask>()
-        val carryOverTasks = mutableListOf<ObsidianTask>()
+        val routineTasks = mutableListOf<Task>()
+        val carryOverTasks = mutableListOf<Task>()
         val reflectionLines = mutableListOf<String>()
         var section: ObsidianSection = ObsidianSection.ROUTINE
 
@@ -117,10 +117,10 @@ object ObsidianNotes {
     }
 
     /** Unchecked routine tasks still pending. */
-    fun pendingRoutineTasks(content: String): List<ObsidianTask> = parse(content).pendingRoutineTasks
+    fun pendingRoutineTasks(content: String): List<Task> = parse(content).pendingRoutineTasks
 
     /** Unchecked backlog tasks waiting in the carry-over slot. */
-    fun carryOverTasks(content: String): List<ObsidianTask> =
+    fun carryOverTasks(content: String): List<Task> =
         parse(content).carryOverTasks.filter { !it.checked }
 
     /**
@@ -131,7 +131,7 @@ object ObsidianNotes {
         note: ObsidianNote,
         gate: TaskGate = TaskGate.HARD,
         limit: Int = MAX_SUGGESTIONS,
-    ): List<ObsidianTask> {
+    ): List<Task> {
         val routine = note.pendingRoutineTasks
         val backlog = note.carryOverTasks.filter { !it.checked }
         return when (gate) {
@@ -155,7 +155,7 @@ object ObsidianNotes {
         gate: TaskGate = TaskGate.HARD,
         limit: Int = MAX_SUGGESTIONS,
         randomBacklogIndex: Int?,
-    ): List<ObsidianTask> {
+    ): List<Task> {
         val base = suggestions(note, gate, limit)
         val shown = base.map { it.text }.toSet()
         val candidates = note.carryOverTasks.filter { !it.checked && it.text !in shown }
@@ -165,7 +165,7 @@ object ObsidianNotes {
     }
 
     /** Human-facing task text: wikilink alias, link text, or plain text. `[[Project]]: task` shows as "Project: task". */
-    fun display(task: ObsidianTask): String {
+    fun display(task: Task): String {
         val text = task.text
         val wikilinkStart = text.indexOf("[[")
         if (wikilinkStart >= 0) {
@@ -234,11 +234,11 @@ object ObsidianNotes {
             task != null && !task.checked && task.text == normalized
         }
         if (alreadyPending) return content
-        return insertIntoCarryOver(content, listOf(ObsidianTask(normalized, checked = false)))
+        return insertIntoCarryOver(content, listOf(Task(normalized, checked = false)))
     }
 
     /** Insert [tasks] into the CARRY-OVER slot, i.e. right after the first `---` anchor. */
-    fun insertIntoCarryOver(content: String, tasks: List<ObsidianTask>): String {
+    fun insertIntoCarryOver(content: String, tasks: List<Task>): String {
         val lines = content.split("\n")
         val first = separatorIndex(lines, 1)
         if (first < 0) return content
@@ -254,7 +254,7 @@ object ObsidianNotes {
     data class RolloverPlan(
         val updatedToday: String,
         val updatedPrevious: String,
-        val carriedTasks: List<ObsidianTask>,
+        val carriedTasks: List<Task>,
     )
 
     fun planRollover(todayContent: String, previousContent: String): RolloverPlan? {
@@ -312,9 +312,9 @@ object ObsidianNotes {
             .joinToString("\n")
     }
 
-    private fun String.toTask(): ObsidianTask? =
+    private fun String.toTask(): Task? =
         taskRegex.matchEntire(trim())?.let { match ->
-            ObsidianTask(
+            Task(
                 text = match.groupValues[2].trim(),
                 checked = match.groupValues[1].equals("x", ignoreCase = true),
                 indent = this.takeWhile { it.isWhitespace() }.length,

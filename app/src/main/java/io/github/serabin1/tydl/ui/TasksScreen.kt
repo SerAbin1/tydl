@@ -23,17 +23,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.serabin1.tydl.domain.obsidian.ObsidianTask
+import io.github.serabin1.tydl.domain.obsidian.Task
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
 import io.github.serabin1.tydl.ui.theme.Mist
 import io.github.serabin1.tydl.ui.theme.Tide
 
 @Composable
 fun TasksScreen(
-    tasks: List<ObsidianTask>,
+    tasks: List<Task>,
     todayTasksDone: Int? = null,
     yesterdayTasksDone: Int? = null,
-    onTask: (ObsidianTask) -> Unit,
+    onTask: (Task) -> Unit,
     onSomethingElse: () -> Unit,
     onJustTwoMinutes: () -> Unit,
 ) {

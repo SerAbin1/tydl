@@ -478,21 +478,21 @@ class ObsidianNotesTest {
 
     @Test
     fun `wikilink task text shows the alias not the path`() {
-        val task = ObsidianTask(text = "[[System_Design/LLD/BullMQ|BullMQ]]", checked = false)
+        val task = Task(text = "[[System_Design/LLD/BullMQ|BullMQ]]", checked = false)
 
         assertEquals("BullMQ", ObsidianNotes.display(task))
     }
 
     @Test
     fun `project prefixed task text shows the project and task`() {
-        val task = ObsidianTask(text = "[[Tydl]]: v0.8.0", checked = false)
+        val task = Task(text = "[[Tydl]]: v0.8.0", checked = false)
 
         assertEquals("Tydl: v0.8.0", ObsidianNotes.display(task))
     }
 
     @Test
     fun `markdown link task shows link text`() {
-        val task = ObsidianTask(
+        val task = Task(
             text = "[PortSwigger WebSecurity Academy](https://portswigger.net/web-security)",
             checked = false,
         )
@@ -562,7 +562,7 @@ class ObsidianNotesTest {
             -
             > [!quote] Consistency Before Greatness
             """.trimIndent()
-        val carried = listOf(ObsidianTask("Buy groceries", checked = false))
+        val carried = listOf(Task("Buy groceries", checked = false))
 
         val updated = ObsidianNotes.insertIntoCarryOver(content, carried)
 
