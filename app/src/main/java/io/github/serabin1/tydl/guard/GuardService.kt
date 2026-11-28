@@ -574,12 +574,15 @@ class GuardService : Service() {
             return emptyList()
         }
         val note = ObsidianNotes.parse(content, today)
-        val backlog = note.carryOverTasks.filter { !it.checked }
-        val randomIndex = if (backlog.isNotEmpty()) java.util.Random().nextInt(backlog.size) else null
+        val gate = vault.taskGate()
+        val base = ObsidianNotes.suggestions(note, gate)
+        val shown = base.map { it.text }.toSet()
+        val candidates = note.carryOverTasks.filter { !it.checked && it.text !in shown }
+        val randomIndex = if (candidates.isNotEmpty()) java.util.Random().nextInt(candidates.size) else null
         val suggestions = ObsidianNotes.suggestionsWithRandom(
             note,
-            vault.taskGate(),
-            randomBacklogIndex = randomIndex,
+            gate,
+            randomCandidateIndex = randomIndex,
         )
         todayFinishedCount = note.routineTasks.count { it.checked }
         val statsEnabled = settingsStore.load().dailyStatsEnabled

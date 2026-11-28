@@ -287,7 +287,7 @@ class ObsidianNotesTest {
         val result = ObsidianNotes.suggestionsWithRandom(
             note,
             TaskGate.HARD,
-            randomBacklogIndex = 2,
+            randomCandidateIndex = 2,
         ).map { it.text }
 
         assertEquals(listOf("Routine 1", "Routine 2", "Backlog 3"), result)
@@ -314,14 +314,14 @@ class ObsidianNotesTest {
         val result = ObsidianNotes.suggestionsWithRandom(
             note,
             TaskGate.SOFT,
-            randomBacklogIndex = 0,
+            randomCandidateIndex = 0,
         ).map { it.text }
 
         assertEquals(listOf("Backlog 1", "Backlog 2"), result)
     }
 
     @Test
-    fun `random suggestion picks from backlog tasks not already shown for every gate`() {
+    fun `random suggestion picks from unseen backlog candidates for every gate`() {
         val note = ObsidianNotes.parse("""
             Today
 
@@ -342,10 +342,10 @@ class ObsidianNotesTest {
         """.trimIndent())
 
         TaskGate.entries.forEach { gate ->
-            // The routine is done, so every gate shows the same first three backlog tasks. An
-            // index aimed at one of them must still surface an unseen task, whatever the gate.
+            // The routine is done, so every gate shows the same first three backlog tasks.
+            // The random pick selects among the three unseen backlog tasks.
             val suggestionTexts = { index: Int ->
-                ObsidianNotes.suggestionsWithRandom(note, gate, randomBacklogIndex = index)
+                ObsidianNotes.suggestionsWithRandom(note, gate, randomCandidateIndex = index)
                     .map { it.text }
             }
             assertEquals(
@@ -354,14 +354,14 @@ class ObsidianNotesTest {
                 suggestionTexts(0),
             )
             assertEquals(
-                "$gate index=4",
+                "$gate index=1",
                 listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 5"),
-                suggestionTexts(4),
+                suggestionTexts(1),
             )
             assertEquals(
-                "$gate index=5",
+                "$gate index=2",
                 listOf("Backlog 1", "Backlog 2", "Backlog 3", "Backlog 6"),
-                suggestionTexts(5),
+                suggestionTexts(2),
             )
         }
     }
@@ -387,19 +387,18 @@ class ObsidianNotesTest {
 
             -
         """.trimIndent())
-        val backlogTexts = note.carryOverTasks.map { it.text }
 
         TaskGate.entries.forEach { gate ->
             val base = ObsidianNotes.suggestions(note, gate).map { it.text }
-            (backlogTexts.indices).forEach { index ->
+            val candidates = note.carryOverTasks.map { it.text }.filter { it !in base }
+            candidates.indices.forEach { index ->
                 val result = ObsidianNotes.suggestionsWithRandom(
-                    note, gate, randomBacklogIndex = index,
+                    note, gate, randomCandidateIndex = index,
                 ).map { it.text }
                 val message = "$gate index=$index result=$result"
                 assertEquals(message, base.size + 1, result.size)
                 assertEquals(message, base, result.take(base.size))
-                assertTrue(message, result.last() in backlogTexts)
-                assertTrue(message, result.last() !in base)
+                assertEquals(message, candidates[index], result.last())
                 assertEquals(message, result.size, result.toSet().size)
             }
         }
@@ -425,7 +424,7 @@ class ObsidianNotesTest {
 
         assertEquals(
             listOf("Backlog 1", "Backlog 2", "Backlog 3"),
-            ObsidianNotes.suggestionsWithRandom(note, TaskGate.SOFT, randomBacklogIndex = 2)
+            ObsidianNotes.suggestionsWithRandom(note, TaskGate.SOFT, randomCandidateIndex = 2)
                 .map { it.text },
         )
     }
@@ -446,11 +445,11 @@ class ObsidianNotesTest {
 
         assertEquals(
             listOf("Routine 1"),
-            ObsidianNotes.suggestionsWithRandom(note, randomBacklogIndex = null).map { it.text },
+            ObsidianNotes.suggestionsWithRandom(note, randomCandidateIndex = null).map { it.text },
         )
         assertEquals(
             listOf("Routine 1"),
-            ObsidianNotes.suggestionsWithRandom(note, randomBacklogIndex = 0).map { it.text },
+            ObsidianNotes.suggestionsWithRandom(note, randomCandidateIndex = 0).map { it.text },
         )
     }
 

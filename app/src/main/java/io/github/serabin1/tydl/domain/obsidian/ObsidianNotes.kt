@@ -144,8 +144,7 @@ object ObsidianNotes {
     /**
      * The R&T screen task list: the usual [suggestions] plus one extra task picked at random from
      * the backlog, so a routine day still surfaces an unrelated task. The shell supplies a random
-     * index; the rule stays pure and testable by interpreting it against the backlog tasks that
-     * [suggestions] does not already show.
+     * index into the unseen backlog candidates; the rule stays pure and testable.
      *
      * Returns the suggestions with an unseen random backlog task appended, or just the suggestions
      * when there is no index or every backlog task is already shown.
@@ -154,13 +153,13 @@ object ObsidianNotes {
         note: ObsidianNote,
         gate: TaskGate = TaskGate.HARD,
         limit: Int = MAX_SUGGESTIONS,
-        randomBacklogIndex: Int?,
+        randomCandidateIndex: Int?,
     ): List<Task> {
         val base = suggestions(note, gate, limit)
         val shown = base.map { it.text }.toSet()
         val candidates = note.carryOverTasks.filter { !it.checked && it.text !in shown }
-        if (candidates.isEmpty() || randomBacklogIndex == null) return base
-        val index = ((randomBacklogIndex % candidates.size) + candidates.size) % candidates.size
+        if (candidates.isEmpty() || randomCandidateIndex == null) return base
+        val index = randomCandidateIndex % candidates.size
         return base + candidates[index]
     }
 
