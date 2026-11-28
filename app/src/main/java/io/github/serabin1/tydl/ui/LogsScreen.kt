@@ -188,5 +188,14 @@ private fun tagColor(tag: LogTag): Color = when (tag) {
     LogTag.ERROR -> Alarm
     LogTag.ROLLOVER -> Tide
     LogTag.SESSION -> Tide
-    else -> Mist
+    LogTag.REASON_TIME -> Tide
+    LogTag.TASKS -> Tide
+    LogTag.GRAVITAS -> Tide
+    LogTag.SLEEP -> Mist
+    LogTag.REFLECTION -> Mist
+    LogTag.VAULT -> Mist
+    LogTag.SETTINGS -> Mist
+    LogTag.UNLOCK -> Mist
+    LogTag.SERVICE -> Mist
+    LogTag.APP -> Mist
 }
