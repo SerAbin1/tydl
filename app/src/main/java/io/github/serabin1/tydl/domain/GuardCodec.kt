@@ -9,10 +9,10 @@ import java.net.URLEncoder
  */
 object GuardCodec {
 
-    private const val VERSION = "v6"
+    private const val VERSION = "v7"
     private const val NONE = "-"
     private const val SEPARATOR = "|"
-    private const val PARTS = 17
+    private const val PARTS = 14
 
     fun encode(state: GuardState): String {
         val session = state.session
@@ -24,9 +24,6 @@ object GuardCodec {
             session?.requestedMinutes?.toString() ?: NONE,
             session?.extensionsUsed?.toString() ?: NONE,
             state.pausedUntil.toString(),
-            state.extensionsTodayCount.toString(),
-            state.extensionsTodayMinutes.toString(),
-            state.extensionsDayStart.toString(),
             state.completedSession?.let { URLEncoder.encode(it.reason, Charsets.UTF_8.name()) } ?: "",
             state.completedSession?.startedAt?.toString() ?: NONE,
             state.completedSession?.endsAt?.toString() ?: NONE,
@@ -44,13 +41,10 @@ object GuardCodec {
             if (parts[0] != VERSION || parts.size != PARTS) return GuardState()
             GuardState(
                 session = decodeSession(parts, 1),
-                completedSession = decodeSession(parts, 10),
+                completedSession = decodeSession(parts, 7),
                 pausedUntil = parts[6].toLong(),
-                extensionsTodayCount = parts[7].toInt(),
-                extensionsTodayMinutes = parts[8].toInt(),
-                extensionsDayStart = parts[9].toLong(),
-                selectedTask = parts[15].ifBlank { null }?.let { URLDecoder.decode(it, Charsets.UTF_8.name()) },
-                promptOnPauseEnd = parts[16].toBoolean(),
+                selectedTask = parts[12].ifBlank { null }?.let { URLDecoder.decode(it, Charsets.UTF_8.name()) },
+                promptOnPauseEnd = parts[13].toBoolean(),
             )
         } catch (e: Exception) {
             GuardState()

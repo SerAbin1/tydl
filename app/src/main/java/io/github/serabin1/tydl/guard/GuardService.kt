@@ -665,6 +665,7 @@ class GuardService : Service() {
 
     private fun showExpiry() = whenUnlocked("expiry") {
         val session = state.session ?: return@whenUnlocked
+        val todayStats = if (settingsStore.load().dailyStatsEnabled) dailyStatsStore.loadToday() else null
         // An unlock and a deadline can both ask for the expiry; rebuilding it would wipe whatever
         // the user has typed into the extend form.
         if (expiryOverlay != null) {
@@ -687,8 +688,8 @@ class GuardService : Service() {
                     ExpiryScreen(
                         session = session,
                         now = now(),
-                        extensionsTodayCount = state.extensionsTodayCount,
-                        extensionsTodayMinutes = state.extensionsTodayMinutes,
+                        extensionsTodayCount = todayStats?.extensionsCount ?: 0,
+                        extensionsTodayMinutes = todayStats?.extensionsMinutes ?: 0,
                         quote = quote,
                         task = task,
                         onTaskFinished = { completeTask() },

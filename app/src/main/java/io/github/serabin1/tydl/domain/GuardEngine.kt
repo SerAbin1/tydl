@@ -10,9 +10,6 @@ data class GuardState(
     val pausedUntil: Long = 0L,
     /** A "Just 2 mins" pause prompts when it ends; an ordinary pause stays silent until unlock. */
     val promptOnPauseEnd: Boolean = false,
-    val extensionsTodayCount: Int = 0,
-    val extensionsTodayMinutes: Int = 0,
-    val extensionsDayStart: Long = 0L,
     /** The task this session was started for, if any; set by task picks, cleared when done. */
     val selectedTask: String? = null,
 ) {
@@ -84,8 +81,6 @@ data class GuardStep(val state: GuardState, val effect: GuardEffect)
  */
 object GuardEngine {
 
-    fun dayStart(now: Long): Long = now - (now % (24L * 60 * 60 * 1000))
-
     /**
      * The next instant the guard needs to look at the clock, or null when nothing is pending.
      *
@@ -131,14 +126,9 @@ object GuardEngine {
             val session = state.session
             if (session != null && session.canExtend() && Reasons.typed(event.reason) != null) {
                 val safeMinutes = event.minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
-                val dayStart = dayStart(event.now)
-                val reset = state.extensionsDayStart != dayStart
                 GuardStep(
                     state.copy(
                         session = session.extend(event.now, safeMinutes),
-                        extensionsTodayCount = if (reset) 1 else state.extensionsTodayCount + 1,
-                        extensionsTodayMinutes = if (reset) safeMinutes else state.extensionsTodayMinutes + safeMinutes,
-                        extensionsDayStart = dayStart,
                     ),
                     GuardEffect.None,
                 )

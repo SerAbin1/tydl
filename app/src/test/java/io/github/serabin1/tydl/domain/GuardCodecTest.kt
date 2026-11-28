@@ -22,9 +22,6 @@ class GuardCodecTest {
             session = Session.start("check the build", 5, t0).extend(t0 + minute),
             selectedTask = "[[Tydl]]: check the build",
             pausedUntil = t0 + 30 * minute,
-            extensionsTodayCount = 1,
-            extensionsTodayMinutes = 5,
-            extensionsDayStart = t0,
         )
 
         assertEquals(state, GuardCodec.decode(GuardCodec.encode(state)))
@@ -70,7 +67,7 @@ class GuardCodecTest {
     @Test
     fun `an older state string decodes to the default state`() {
         // No migration: a state written before the quick-pause flag is intentionally dropped.
-        assertEquals(GuardState(), GuardCodec.decode("v5" + "|".repeat(15)))
+        assertEquals(GuardState(), GuardCodec.decode("v6" + "|".repeat(16)))
     }
 
     @Test

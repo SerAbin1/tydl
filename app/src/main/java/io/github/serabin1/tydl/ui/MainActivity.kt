@@ -249,8 +249,8 @@ class MainActivity : ComponentActivity() {
                             session != null -> ExpiryScreen(
                                 session = session,
                                 now = System.currentTimeMillis(),
-                                extensionsTodayCount = guardState.extensionsTodayCount,
-                                extensionsTodayMinutes = guardState.extensionsTodayMinutes,
+                                extensionsTodayCount = dailyStatsStore.loadToday().extensionsCount,
+                                extensionsTodayMinutes = dailyStatsStore.loadToday().extensionsMinutes,
                                 task = guardState.selectedTask,
                                 onTaskFinished = {
                                     val task = guardState.selectedTask ?: return@ExpiryScreen
