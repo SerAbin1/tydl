@@ -55,7 +55,7 @@ import io.github.serabin1.tydl.ui.DoneScreen
 import io.github.serabin1.tydl.ui.ExpiryScreen
 import io.github.serabin1.tydl.ui.GravitasScreen
 import io.github.serabin1.tydl.ui.MainActivity
-import io.github.serabin1.tydl.ui.PromptScreen
+import io.github.serabin1.tydl.ui.ReasonTimeScreen
 import io.github.serabin1.tydl.ui.TasksScreen
 import io.github.serabin1.tydl.ui.theme.TydlTheme
 import kotlinx.coroutines.CoroutineScope
@@ -90,7 +90,7 @@ class GuardService : Service() {
 
     /** Debounces SCREEN_ON + USER_PRESENT arriving for the same unlock. */
     private var lastUnlockAt = 0L
-    private var promptOverlay: OverlayWindow? = null
+    private var reasonTimeOverlay: OverlayWindow? = null
     private var expiryOverlay: OverlayWindow? = null
     private var doneOverlay: OverlayWindow? = null
     private var tasksOverlay: OverlayWindow? = null
@@ -311,7 +311,7 @@ class GuardService : Service() {
         TydlLog.i(LogTag.SERVICE, "service destroyed")
         cancelKeyguardPoll("destroy")
         scope.cancel()
-        hidePrompt()
+        hideReasonTime()
         hideExpiry()
         hideDone()
         hideTasks()
@@ -409,19 +409,19 @@ class GuardService : Service() {
             "event=${event.describe()} effect=${step.effect.describe()} state=${stateLabel()}",
         )
         when (step.effect) {
-            GuardEffect.ShowPrompt -> showPrompt()
+            GuardEffect.ShowReasonTime -> showReasonTime()
             GuardEffect.ShowExpiry -> showExpiry()
             GuardEffect.ShowDone -> showDone()
             GuardEffect.None -> Unit
         }
         val now = now()
-        if (state.session != null) hidePrompt()
+        if (state.session != null) hideReasonTime()
         if (state.session?.isOverrun(now) != true) hideExpiry()
         if (state.completedSession == null) hideDone()
         if (changed) wakeSignal.trySend(Unit)
     }
 
-    private fun showPrompt() {
+    private fun showReasonTime() {
         whenUnlocked("prompt") {
             scope.launch {
                 suggestedTasks = withContext(Dispatchers.IO) {
@@ -432,31 +432,31 @@ class GuardService : Service() {
                     showTasks(suggestedTasks) { task ->
                         suggestedTasks = emptyList()
                         pendingTask = task
-                        showPrompt()
+                        showReasonTime()
                     }
                     return@launch
                 }
-                showPromptForm()
+                showReasonTimeForm()
             }
         }
     }
 
-    private fun showPromptForm() {
+    private fun showReasonTimeForm() {
         if (!Settings.canDrawOverlays(this)) {
-            TydlLog.i(LogTag.PROMPT, "no overlay permission, using notification")
+            TydlLog.i(LogTag.REASON_TIME, "no overlay permission, using notification")
             notifyAlert(
                 title = "State your reason",
                 text = "Tap to tell Tydl why you unlocked.",
-                extra = EXTRA_SHOW_PROMPT,
+                extra = EXTRA_SHOW_REASON_TIME,
             )
         } else {
-            hidePrompt()
+            hideReasonTime()
             val initialReason = pendingTask?.let { ObsidianNotes.display(it) } ?: ""
             val taskText = pendingTask?.text
-            promptOverlay = showOverlay { overlay ->
+            reasonTimeOverlay = showOverlay { overlay ->
                 TydlTheme {
-                    PromptScreen(initialReason = initialReason, onStart = { reason, minutes, addAsTask ->
-                        promptOverlay = null
+                    ReasonTimeScreen(initialReason = initialReason, onStart = { reason, minutes, addAsTask ->
+                        reasonTimeOverlay = null
                         val settings = settingsStore.load()
                         if (settings.gravitasEnabled && Gravitas.shouldShow(minutes)) {
                             showGravitas(reason, minutes, taskText, addAsTask)
@@ -468,7 +468,7 @@ class GuardService : Service() {
                     })
                 }
             }
-            TydlLog.i(LogTag.PROMPT, "overlay shown")
+            TydlLog.i(LogTag.REASON_TIME, "overlay shown")
         }
     }
 
@@ -618,14 +618,14 @@ class GuardService : Service() {
                         pendingTask = null
                         overlay.remove()
                         tasksOverlay = null
-                        showPromptForm()
+                        showReasonTimeForm()
                     },
                     onJustTwoMinutes = {
                         suggestedTasks = emptyList()
                         pendingTask = null
                         overlay.remove()
                         tasksOverlay = null
-                        hidePrompt()
+                        hideReasonTime()
                         quickPause(this@GuardService)
                         TydlLog.i(LogTag.SESSION, "just 2 mins requested")
                     },
@@ -799,9 +799,9 @@ class GuardService : Service() {
         return overlay
     }
 
-    private fun hidePrompt() {
-        promptOverlay?.remove()
-        promptOverlay = null
+    private fun hideReasonTime() {
+        reasonTimeOverlay?.remove()
+        reasonTimeOverlay = null
     }
 
     private fun hideExpiry() {
@@ -955,7 +955,7 @@ class GuardService : Service() {
         private const val EXTRA_PROMPT_ON_END = "prompt_on_end"
         private const val EXTRA_TASK = "task"
         private const val EXTRA_ADD_AS_TASK = "add_as_task"
-        const val EXTRA_SHOW_PROMPT = "show_prompt"
+        const val EXTRA_SHOW_REASON_TIME = "show_prompt"
         const val EXTRA_SHOW_EXPIRY = "show_expiry"
         private const val UNLOCK_DEBOUNCE_MS = 1_500L
         private const val KEYGUARD_RETRY_MS = 600L

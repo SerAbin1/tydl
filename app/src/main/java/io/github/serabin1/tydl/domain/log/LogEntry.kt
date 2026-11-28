@@ -12,7 +12,7 @@ enum class LogTag(val label: String) {
     UNLOCK("unlock"),
     ROLLOVER("rollover"),
     TASKS("tasks"),
-    PROMPT("prompt"),
+    REASON_TIME("prompt"),
     SESSION("session"),
     VAULT("vault"),
     SETTINGS("settings"),

@@ -25,7 +25,7 @@ class GuardEngineTest {
     fun `unlocking with no session asks for a reason`() {
         val step = unlocked(GuardState(), t0)
 
-        assertEquals(GuardEffect.ShowPrompt, step.effect)
+        assertEquals(GuardEffect.ShowReasonTime, step.effect)
     }
 
     @Test
@@ -82,7 +82,7 @@ class GuardEngineTest {
 
         assertNull(ended.state.session)
         assertEquals(GuardEffect.None, ended.effect)
-        assertEquals(GuardEffect.ShowPrompt, unlocked(ended.state, t0 + minute).effect)
+        assertEquals(GuardEffect.ShowReasonTime, unlocked(ended.state, t0 + minute).effect)
     }
 
     @Test
@@ -160,7 +160,7 @@ class GuardEngineTest {
 
         assertEquals(GuardEffect.None, unlocked(paused, t0 + minute).effect)
         assertEquals(GuardEffect.None, deadline(paused, t0 + 1 * minute).effect)
-        assertEquals(GuardEffect.ShowPrompt, unlocked(paused, t0 + 15 * minute).effect)
+        assertEquals(GuardEffect.ShowReasonTime, unlocked(paused, t0 + 15 * minute).effect)
     }
 
     private fun quickPaused() = GuardEngine.reduce(
@@ -182,7 +182,7 @@ class GuardEngineTest {
 
         val step = deadline(paused, QuickPause.until(t0))
 
-        assertEquals(GuardEffect.ShowPrompt, step.effect)
+        assertEquals(GuardEffect.ShowReasonTime, step.effect)
         assertFalse(step.state.promptOnPauseEnd)
         assertEquals(GuardEffect.None, deadline(step.state, QuickPause.until(t0) + 1).effect)
     }
@@ -196,7 +196,7 @@ class GuardEngineTest {
         assertEquals(GuardEffect.None, during.effect)
         assertEquals(paused, during.state)
         val after = unlocked(paused, QuickPause.until(t0))
-        assertEquals(GuardEffect.ShowPrompt, after.effect)
+        assertEquals(GuardEffect.ShowReasonTime, after.effect)
         assertFalse(after.state.promptOnPauseEnd)
     }
 

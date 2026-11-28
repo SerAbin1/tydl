@@ -25,7 +25,7 @@ fun GuardEvent.describe(): String = when (this) {
 
 fun GuardEffect.describe(): String = when (this) {
     GuardEffect.None -> "None"
-    GuardEffect.ShowPrompt -> "ShowPrompt"
+    GuardEffect.ShowReasonTime -> "ShowReasonTime"
     GuardEffect.ShowExpiry -> "ShowExpiry"
     GuardEffect.ShowDone -> "ShowDone"
 }

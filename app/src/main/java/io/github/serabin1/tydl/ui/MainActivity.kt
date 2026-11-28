@@ -218,7 +218,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    fallback == GuardService.EXTRA_SHOW_PROMPT -> PromptScreen(
+                    fallback == GuardService.EXTRA_SHOW_REASON_TIME -> ReasonTimeScreen(
                         onStart = { reason, minutes, addAsTask ->
                             GuardService.startSession(
                                 this,
@@ -301,8 +301,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun fallbackFrom(intent: Intent?): String? = when {
-        intent?.getBooleanExtra(GuardService.EXTRA_SHOW_PROMPT, false) == true ->
-            GuardService.EXTRA_SHOW_PROMPT
+        intent?.getBooleanExtra(GuardService.EXTRA_SHOW_REASON_TIME, false) == true ->
+            GuardService.EXTRA_SHOW_REASON_TIME
         intent?.getBooleanExtra(GuardService.EXTRA_SHOW_EXPIRY, false) == true ->
             GuardService.EXTRA_SHOW_EXPIRY
         else -> null

@@ -45,7 +45,7 @@ fun promptMinutes(text: String): Int? =
     text.toIntOrNull()?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
 
 @Composable
-fun PromptScreen(
+fun ReasonTimeScreen(
     initialReason: String = "",
     onStart: (String, Int, Boolean) -> Unit,
 ) {

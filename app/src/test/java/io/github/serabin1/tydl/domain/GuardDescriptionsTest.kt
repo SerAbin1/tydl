@@ -36,7 +36,7 @@ class GuardDescriptionsTest {
     @Test
     fun `describes every effect`() {
         assertEquals("None", GuardEffect.None.describe())
-        assertEquals("ShowPrompt", GuardEffect.ShowPrompt.describe())
+        assertEquals("ShowReasonTime", GuardEffect.ShowReasonTime.describe())
         assertEquals("ShowExpiry", GuardEffect.ShowExpiry.describe())
         assertEquals("ShowDone", GuardEffect.ShowDone.describe())
     }

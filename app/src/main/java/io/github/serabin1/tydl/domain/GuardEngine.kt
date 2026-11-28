@@ -57,7 +57,7 @@ sealed interface GuardEvent {
 
 sealed interface GuardEffect {
     data object None : GuardEffect
-    data object ShowPrompt : GuardEffect
+    data object ShowReasonTime : GuardEffect
     data object ShowExpiry : GuardEffect
     data object ShowDone : GuardEffect
 }
@@ -149,12 +149,12 @@ object GuardEngine {
     private fun onUnlocked(state: GuardState, now: Long): GuardStep {
         if (state.isPaused(now)) return GuardStep(state, GuardEffect.None)
         if (state.promptOnPauseEnd && state.session == null) {
-            return GuardStep(state.copy(promptOnPauseEnd = false), GuardEffect.ShowPrompt)
+            return GuardStep(state.copy(promptOnPauseEnd = false), GuardEffect.ShowReasonTime)
         }
         if (state.completedSession != null) {
             return GuardStep(state, GuardEffect.ShowDone)
         }
-        val session = state.session ?: return GuardStep(state, GuardEffect.ShowPrompt)
+        val session = state.session ?: return GuardStep(state, GuardEffect.ShowReasonTime)
         return if (session.isOverrun(now)) {
             GuardStep(state, GuardEffect.ShowExpiry)
         } else {
@@ -180,7 +180,7 @@ object GuardEngine {
             val cleared = state.copy(promptOnPauseEnd = false)
             return GuardStep(
                 cleared,
-                if (cleared.session == null) GuardEffect.ShowPrompt else GuardEffect.None,
+                if (cleared.session == null) GuardEffect.ShowReasonTime else GuardEffect.None,
             )
         }
         val session = state.session ?: return GuardStep(state, GuardEffect.None)
