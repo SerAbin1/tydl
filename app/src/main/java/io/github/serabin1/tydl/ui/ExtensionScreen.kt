@@ -117,7 +117,7 @@ fun ExtensionScreen(
             value = minutesText,
             onValueChange = { minutesText = it.filter(Char::isDigit).take(3) },
             label = { Text("Extension minutes") },
-            supportingText = { Text("${Session.MIN_MINUTES}-${Session.MAX_MINUTES} minutes") },
+            supportingText = { Text("${Session.MIN_MINUTES}-${Session.MAX_MINUTES_PER_GRANT} minutes") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             shape = RoundedCornerShape(14.dp),

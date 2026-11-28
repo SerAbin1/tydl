@@ -675,7 +675,7 @@ class GuardService : Service() {
      * today's REFLECTION slot, naming the starting reason so the bullet stands on its own.
      */
     private fun extendSession(reason: String, minutes: Int) {
-        val safeMinutes = minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
+        val safeMinutes = minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES_PER_GRANT)
         val before = state.session
         handle(GuardEvent.Extend(now(), safeMinutes, reason))
         val applied = state.session != null &&
@@ -1025,7 +1025,7 @@ class GuardService : Service() {
             context,
             base(context)
                 .setAction(ACTION_EXTEND)
-                .putExtra(EXTRA_MINUTES, minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES))
+                .putExtra(EXTRA_MINUTES, minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES_PER_GRANT))
                 .putExtra(EXTRA_REASON, reason),
         )
 

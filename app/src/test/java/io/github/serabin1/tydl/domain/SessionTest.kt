@@ -77,6 +77,6 @@ class SessionTest {
     @Test
     fun `start clamps requested minutes into the supported range`() {
         assertEquals(Session.MIN_MINUTES, Session.start("Email", 0, t0).requestedMinutes)
-        assertEquals(Session.MAX_MINUTES, Session.start("Email", 999, t0).requestedMinutes)
+        assertEquals(Session.MAX_MINUTES_PER_GRANT, Session.start("Email", 999, t0).requestedMinutes)
     }
 }

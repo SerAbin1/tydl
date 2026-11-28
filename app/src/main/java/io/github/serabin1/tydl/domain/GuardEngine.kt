@@ -128,7 +128,7 @@ object GuardEngine {
         is GuardEvent.Extend -> {
             val session = state.session
             if (session != null && session.canExtend() && Reasons.typed(event.reason) != null) {
-                val safeMinutes = event.minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)
+                val safeMinutes = event.minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES_PER_GRANT)
                 GuardStep(
                     state.copy(
                         session = session.extend(event.now, safeMinutes),

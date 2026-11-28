@@ -26,7 +26,7 @@ data class Session(
      */
     fun extend(now: Long, minutes: Int = EXTENSION_MINUTES): Session {
         if (!canExtend()) return this
-        val safeMinutes = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES)
+        val safeMinutes = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES_PER_GRANT)
         return copy(
             endsAt = maxOf(endsAt, now) + safeMinutes * MINUTE_MS,
             extensionsUsed = extensionsUsed + 1,
@@ -37,12 +37,12 @@ data class Session(
         const val MINUTE_MS = 60_000L
         const val DEFAULT_MINUTES = 5
         const val MIN_MINUTES = 1
-        const val MAX_MINUTES = 60
+        const val MAX_MINUTES_PER_GRANT = 60
         const val EXTENSION_MINUTES = 5
         const val MAX_EXTENSIONS = 2
 
         fun start(reason: String, minutes: Int = DEFAULT_MINUTES, now: Long): Session {
-            val safeMinutes = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES)
+            val safeMinutes = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES_PER_GRANT)
             return Session(
                 reason = reason,
                 startedAt = now,

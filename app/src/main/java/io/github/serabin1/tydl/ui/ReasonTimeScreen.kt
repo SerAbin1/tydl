@@ -42,7 +42,7 @@ import io.github.serabin1.tydl.ui.theme.Mist
 import io.github.serabin1.tydl.ui.theme.Tide
 
 fun promptMinutes(text: String): Int? =
-    text.toIntOrNull()?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES }
+    text.toIntOrNull()?.takeIf { it in Session.MIN_MINUTES..Session.MAX_MINUTES_PER_GRANT }
 
 @Composable
 fun ReasonTimeScreen(
@@ -128,7 +128,7 @@ fun ReasonTimeScreen(
             onValueChange = { minutesText = it.filter(Char::isDigit).take(3) },
             label = { Text("Minutes") },
             supportingText = {
-                Text("${Session.MIN_MINUTES}-${Session.MAX_MINUTES} minutes")
+                Text("${Session.MIN_MINUTES}-${Session.MAX_MINUTES_PER_GRANT} minutes")
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
