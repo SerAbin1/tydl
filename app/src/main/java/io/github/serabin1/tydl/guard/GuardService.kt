@@ -102,6 +102,12 @@ class GuardService : Service() {
     /** A task the user tapped; pre-fills reason but keeps friction (time still required). */
     private var pendingTask: ObsidianTask? = null
 
+    /** Checked routine tasks in today's note (note is the record of truth); computed in loadSuggestedTasks. */
+    private var todayFinishedCount: Int = 0
+
+    /** Checked routine tasks in yesterday's note, or null when no readable note exists. */
+    private var yesterdayFinishedCount: Int? = null
+
     /** Daily-note rollover; idempotent and re-evaluated against the vault on every trigger. */
     private lateinit var rollover: DailyNoteRollover
 
@@ -511,11 +517,11 @@ class GuardService : Service() {
     private fun loadGravitasContent(): GravitasContent {
         val quote = vault.readTemplate()?.let { ObsidianNotes.templateQuote(it) } ?: ""
         val yesterdayReflections = runCatching {
-            val names = vault.listNoteNames()
             val format = vault.filenameFormat()
-            val todayName = vault.todayFileName()
-            val prevName = ObsidianNotes.latestEarlierDailyNote(names, todayName, format)
-            prevName?.let { vault.readNote(it) }?.let { ObsidianNotes.parse(it).reflection }
+            val rolloverHour = settingsStore.load().rolloverHour
+            val prevDate = TydlDay.of(now(), rolloverHour).minusDays(1)
+            val prevName = ObsidianNotes.dailyNoteName(format, prevDate)
+            vault.readNote(prevName)?.let { ObsidianNotes.parse(it).reflection }
         }.getOrNull()
         val todayFinished = runCatching {
             vault.readToday()?.let { ObsidianNotes.parse(it) }
@@ -524,11 +530,15 @@ class GuardService : Service() {
         }.getOrNull() ?: emptyList()
         val settings = settingsStore.load()
         val sleep = if (settings.dailyStatsEnabled && settings.sleepTrackingEnabled) {
-            dailyStatsStore.loadToday().let { stats ->
-                stats.sleepStart?.let { start ->
-                    val wake = stats.wakeTime ?: start
-                    SleepTracker.formatDuration(wake - start)
-                }
+            val todayStats = dailyStatsStore.loadToday()
+            val sleepStats = if (todayStats.sleepStart != null) todayStats else {
+                val rolloverHour = settings.rolloverHour
+                val prevDate = TydlDay.of(now(), rolloverHour).minusDays(1)
+                dailyStatsStore.load(prevDate.toString())
+            }
+            sleepStats.sleepStart?.let { start ->
+                val wake = sleepStats.wakeTime ?: start
+                SleepTracker.formatDuration(wake - start)
             }
         } else null
         return GravitasContent(quote, yesterdayReflections, todayFinished, sleep)
@@ -542,6 +552,8 @@ class GuardService : Service() {
     )
 
     private fun loadSuggestedTasks(): List<ObsidianTask> {
+        todayFinishedCount = 0
+        yesterdayFinishedCount = null
         if (!vault.isConfigured()) {
             TydlLog.i(LogTag.TASKS, "vault not configured")
             return emptyList()
@@ -563,6 +575,10 @@ class GuardService : Service() {
             vault.taskGate(),
             randomBacklogIndex = randomIndex,
         )
+        todayFinishedCount = note.routineTasks.count { it.checked }
+        val statsEnabled = settingsStore.load().dailyStatsEnabled
+        yesterdayFinishedCount = if (statsEnabled) computeYesterdayFinishedCount() else null
+
         TydlLog.i(
             LogTag.TASKS,
             "${suggestions.size} suggestions from $today gate=${vault.taskGate()}",
@@ -570,11 +586,21 @@ class GuardService : Service() {
         return suggestions
     }
 
+    /** Checked routine tasks in yesterday's (previous Tydl day) note, or null when no readable note exists. */
+    private fun computeYesterdayFinishedCount(): Int? = runCatching {
+        val format = vault.filenameFormat()
+        val rolloverHour = settingsStore.load().rolloverHour
+        val prevDate = TydlDay.of(now(), rolloverHour).minusDays(1)
+        val prevName = ObsidianNotes.dailyNoteName(format, prevDate)
+        val content = vault.readNote(prevName) ?: return@runCatching null
+        ObsidianNotes.parse(content).routineTasks.count { it.checked }
+    }.getOrNull()
+
     private fun showTasks(tasks: List<ObsidianTask>, onTask: (ObsidianTask) -> Unit) {
         hideTasks()
         val statsEnabled = settingsStore.load().dailyStatsEnabled
-        val todayDone = if (statsEnabled) dailyStatsStore.loadToday().tasksDone else null
-        val yesterdayDone = if (statsEnabled) yesterdayTasksDone() else null
+        val todayDone = if (statsEnabled) todayFinishedCount else null
+        val yesterdayDone = if (statsEnabled) yesterdayFinishedCount else null
         tasksOverlay = showOverlay { overlay ->
             TydlTheme {
                 TasksScreen(
@@ -608,17 +634,6 @@ class GuardService : Service() {
         }
     }
 
-    /** The ISO date key for the previous Tydl day, matching [DailyStatsStore]'s date format. */
-    private fun yesterdayDateKey(): String =
-        TydlDay.previousKey(now(), settingsStore.load().rolloverHour)
-
-    /** Yesterday's tasks-done, or null when there's no usable record (never shown as 0). */
-    private fun yesterdayTasksDone(): Int? {
-        val key = yesterdayDateKey()
-        val stats = dailyStatsStore.load(key)
-        val hasData = stats.sessions > 0 || stats.tasksDone > 0 || stats.unlocks > 0
-        return if (hasData) stats.tasksDone else null
-    }
 
     private fun hideTasks() {
         tasksOverlay?.remove()
