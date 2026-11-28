@@ -1,5 +1,7 @@
 package io.github.serabin1.tydl.domain.obsidian
 
+import io.github.serabin1.tydl.domain.TydlDay
+
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -18,7 +20,7 @@ class ObsidianUrisTest {
         val at = java.time.LocalDateTime.of(2026, 11, 24, 3, 59)
         val name = ObsidianNotes.dailyNoteName(
             "DD-MM-YYYY",
-            ObsidianNotes.effectiveDate(at, rolloverHour = 4),
+            TydlDay.of(at, rolloverHour = 4),
         )
         assertEquals("obsidian://open?file=23-11-2026.md", ObsidianUris.openNote(name))
     }

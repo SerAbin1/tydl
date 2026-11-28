@@ -211,7 +211,7 @@ class GuardEngineTest {
 
     @Test
     fun `resuming clears a quick pause`() {
-        val resumed = GuardEngine.reduce(quickPaused(), GuardEvent.Paused(0L))
+        val resumed = GuardEngine.reduce(quickPaused(), GuardEvent.Resume)
 
         assertFalse(resumed.state.promptOnPauseEnd)
         assertEquals(GuardEffect.None, deadline(resumed.state, QuickPause.until(t0)).effect)

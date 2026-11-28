@@ -52,6 +52,9 @@ sealed interface GuardEvent {
     /** Manual pause/resume leaves [promptOnPauseEnd] false; the quick 2-minute pause sets it. */
     data class Paused(val until: Long, val promptOnPauseEnd: Boolean = false) : GuardEvent
 
+    /** Resumes the guard after a manual pause. Replaces the old `Paused(until = 0)` sentinel. */
+    data object Resume : GuardEvent
+
     data class ScreenOff(val now: Long) : GuardEvent
 }
 
@@ -141,6 +144,14 @@ object GuardEngine {
             state.copy(
                 pausedUntil = event.until,
                 promptOnPauseEnd = event.promptOnPauseEnd,
+            ),
+            GuardEffect.None,
+        )
+
+        GuardEvent.Resume -> GuardStep(
+            state.copy(
+                pausedUntil = 0L,
+                promptOnPauseEnd = false,
             ),
             GuardEffect.None,
         )

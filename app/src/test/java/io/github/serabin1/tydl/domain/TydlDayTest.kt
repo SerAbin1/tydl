@@ -57,13 +57,6 @@ class TydlDayTest {
     }
 
     @Test
-    fun `daily note rollover reuses the shared Tydl day`() {
-        val local = LocalDateTime.of(2026, 11, 27, 3, 59)
-
-        assertEquals(TydlDay.of(local, rolloverHour = 4), ObsidianNotes.effectiveDate(local, 4))
-    }
-
-    @Test
     fun `retention uses the Tydl day before rollover`() {
         val tydlToday = getTydlDay(at(3, 59), rolloverHour = 4, zone = utc)
 

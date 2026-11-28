@@ -3,6 +3,7 @@ package io.github.serabin1.tydl.data
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import io.github.serabin1.tydl.domain.TydlDay
 import io.github.serabin1.tydl.domain.obsidian.DailyNoteVault
 import io.github.serabin1.tydl.domain.obsidian.ObsidianNotes
 import io.github.serabin1.tydl.domain.log.LogTag
@@ -145,7 +146,7 @@ class ObsidianVault(private val context: Context) : DailyNoteVault {
         val current = settings
         return ObsidianNotes.dailyNoteName(
             current.filenameFormat,
-            ObsidianNotes.effectiveDate(now, current.rolloverHour),
+            TydlDay.of(now, current.rolloverHour),
         )
     }
 

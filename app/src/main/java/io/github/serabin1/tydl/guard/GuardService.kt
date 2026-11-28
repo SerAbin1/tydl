@@ -294,6 +294,7 @@ class GuardService : Service() {
                     promptOnPauseEnd = command.getBooleanExtra(EXTRA_PROMPT_ON_END, false),
                 ),
             )
+            ACTION_RESUME -> handle(GuardEvent.Resume)
             ACTION_UNLOCK -> {
                 TydlLog.i(LogTag.UNLOCK, "manual unlock requested")
                 onUnlock()
@@ -354,7 +355,7 @@ class GuardService : Service() {
         if (sleep != null) {
             dailyStatsStore.recordSleep(sleep.sleepStart, sleep.wakeTime)
             TydlLog.i(
-                LogTag.SESSION,
+                LogTag.SLEEP,
                 "sleep detected: ${SleepTracker.formatDuration(sleep.wakeTime - sleep.sleepStart)}",
             )
         }
@@ -509,7 +510,7 @@ class GuardService : Service() {
                     )
                 }
             }
-            TydlLog.i(LogTag.SESSION, "gravitas overlay shown ($minutes min)")
+            TydlLog.i(LogTag.GRAVITAS, "gravitas overlay shown ($minutes min)")
         }
     }
 
@@ -652,7 +653,7 @@ class GuardService : Service() {
             ensureRollover("task check-off")
             val done = noteWriteMutex.withLock { vault.completeTask(taskText) }
             if (done && settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordTaskDone()
-            TydlLog.i(LogTag.SESSION, "task check-off done=$done")
+            TydlLog.i(LogTag.TASKS, "task check-off done=$done")
         }
     }
 
@@ -661,7 +662,7 @@ class GuardService : Service() {
         scope.launch(Dispatchers.IO) {
             ensureRollover("reflection")
             val done = noteWriteMutex.withLock { vault.appendReflection(reflection) }
-            TydlLog.i(LogTag.SESSION, "reflection saved=$done")
+            TydlLog.i(LogTag.REFLECTION, "reflection saved=$done")
         }
     }
 
@@ -945,6 +946,7 @@ class GuardService : Service() {
         private const val ACTION_END = "io.github.serabin1.tydl.action.END"
         private const val ACTION_EXTEND = "io.github.serabin1.tydl.action.EXTEND"
         private const val ACTION_PAUSE = "io.github.serabin1.tydl.action.PAUSE"
+        private const val ACTION_RESUME = "io.github.serabin1.tydl.action.RESUME"
         private const val ACTION_UNLOCK = "io.github.serabin1.tydl.action.UNLOCK"
         private const val ACTION_COMPLETE_TASK = "io.github.serabin1.tydl.action.COMPLETE_TASK"
         private const val ACTION_APPEND_REFLECTION = "io.github.serabin1.tydl.action.APPEND_REFLECTION"
@@ -1028,7 +1030,7 @@ class GuardService : Service() {
 
         fun resume(context: Context) = send(
             context,
-            base(context).setAction(ACTION_PAUSE).putExtra(EXTRA_UNTIL, 0L),
+            base(context).setAction(ACTION_RESUME),
         )
 
         /** The R&T escape hatch: two quiet minutes, then the prompt comes back on its own. */

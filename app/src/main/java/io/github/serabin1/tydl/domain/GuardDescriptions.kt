@@ -15,11 +15,8 @@ fun GuardEvent.describe(): String = when (this) {
     is GuardEvent.Start -> "Start(minutes=$minutes, task=${if (task != null) "yes" else "no"})"
     GuardEvent.End -> "End"
     is GuardEvent.Extend -> "Extend(minutes=$minutes)"
-    is GuardEvent.Paused -> when {
-        until == 0L -> "Resumed"
-        promptOnPauseEnd -> "Paused(quick)"
-        else -> "Paused"
-    }
+    is GuardEvent.Paused -> if (promptOnPauseEnd) "Paused(quick)" else "Paused"
+    GuardEvent.Resume -> "Resume"
     is GuardEvent.ScreenOff -> "ScreenOff"
 }
 
