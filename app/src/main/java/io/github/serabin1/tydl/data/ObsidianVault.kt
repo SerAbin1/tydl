@@ -16,7 +16,7 @@ import java.time.LocalDateTime
  */
 class ObsidianVault(private val context: Context) : DailyNoteVault {
 
-    private val settingsStore = ObsidianSettingsStore(context)
+    private val settingsStore = TydlSettingsStore(context)
     private val settings get() = settingsStore.load()
 
     override fun isConfigured(): Boolean = settings.vaultUri != null

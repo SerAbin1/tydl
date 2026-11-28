@@ -19,8 +19,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import io.github.serabin1.tydl.R
-import io.github.serabin1.tydl.data.ObsidianSettings
-import io.github.serabin1.tydl.data.ObsidianSettingsStore
+import io.github.serabin1.tydl.data.TydlSettings
+import io.github.serabin1.tydl.data.TydlSettingsStore
 import io.github.serabin1.tydl.data.ObsidianVault
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -60,6 +60,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -70,6 +73,8 @@ import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.data.DailyStatsStore
 import io.github.serabin1.tydl.domain.DailyStats
 import io.github.serabin1.tydl.domain.GuardState
+import io.github.serabin1.tydl.domain.Reasons
+import io.github.serabin1.tydl.domain.Reflections
 import io.github.serabin1.tydl.domain.SleepTracker
 import io.github.serabin1.tydl.domain.log.LogEntry
 import io.github.serabin1.tydl.domain.log.LogFormat
@@ -100,9 +105,9 @@ class MainActivity : ComponentActivity() {
     private var fallback by mutableStateOf<String?>(null)
     private var earlyEnd by mutableStateOf(false)
     private lateinit var obsidianVault: ObsidianVault
-    private lateinit var settingsStore: ObsidianSettingsStore
+    private lateinit var settingsStore: TydlSettingsStore
     private lateinit var dailyStatsStore: DailyStatsStore
-    private var obsidianSettings by mutableStateOf(ObsidianSettings.defaults())
+    private var obsidianSettings by mutableStateOf(TydlSettings.defaults())
     private var showSettings by mutableStateOf(false)
     private var showLogs by mutableStateOf(false)
 
@@ -146,7 +151,7 @@ class MainActivity : ComponentActivity() {
         TydlLog.i(LogTag.APP, "app opened")
         GuardService.start(this)
         obsidianVault = ObsidianVault(this)
-        settingsStore = ObsidianSettingsStore(this)
+        settingsStore = TydlSettingsStore(this)
         obsidianSettings = settingsStore.load()
         dailyStatsStore = DailyStatsStore(this) { obsidianSettings.rolloverHour }
         fallback = fallbackFrom(intent)
@@ -189,8 +194,8 @@ class MainActivity : ComponentActivity() {
                             EarlyEndScreen(
                                 session = session,
                                 task = guardState.selectedTask,
-                                onStartAnother = { note ->
-                                    GuardService.appendReflection(this, note)
+                                onStartAnother = { reflection ->
+                                    GuardService.appendReflection(this, reflection)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     earlyEnd = false
@@ -200,8 +205,8 @@ class MainActivity : ComponentActivity() {
                                     val task = guardState.selectedTask ?: return@EarlyEndScreen
                                     GuardService.completeTask(this)
                                 },
-                                onDone = { note ->
-                                    GuardService.appendReflection(this, note)
+                                onDone = { reflection ->
+                                    GuardService.appendReflection(this, reflection)
                                     GuardService.endAndLock(this)
                                     earlyEnd = false
                                     refresh()
@@ -237,8 +242,8 @@ class MainActivity : ComponentActivity() {
                                     val task = guardState.selectedTask ?: return@DoneScreen
                                     GuardService.completeTask(this)
                                 },
-                                onDone = { note ->
-                                    GuardService.appendReflection(this, note)
+                                onDone = { reflection ->
+                                    GuardService.appendReflection(this, reflection)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
@@ -256,14 +261,14 @@ class MainActivity : ComponentActivity() {
                                     val task = guardState.selectedTask ?: return@ExpiryScreen
                                     GuardService.completeTask(this)
                                 },
-                                onDone = { note ->
-                                    GuardService.appendReflection(this, note)
+                                onDone = { reflection ->
+                                    GuardService.appendReflection(this, reflection)
                                     GuardService.endAndLock(this)
                                     fallback = null
                                     refresh()
                                 },
-                                onStartAnother = { note ->
-                                    GuardService.appendReflection(this, note)
+                                onStartAnother = { reflection ->
+                                    GuardService.appendReflection(this, reflection)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
@@ -333,8 +338,9 @@ class MainActivity : ComponentActivity() {
             notificationsGranted = notificationsGranted,
             deviceAdminGranted = deviceAdminGranted,
             batteryExempt = batteryExempt,
-            onPause = { minutes ->
+            onPause = { minutes, reason ->
                 GuardService.pause(this, minutes)
+                GuardService.appendReflection(this, Reflections.pause(minutes, reason))
                 refresh()
             },
             onResume = {
@@ -377,7 +383,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Discrete settings only: the filename field fires per keystroke, so it stays out of the log. */
-    private fun logSettingsChange(old: ObsidianSettings, new: ObsidianSettings) {
+    private fun logSettingsChange(old: TydlSettings, new: TydlSettings) {
         if (old.rolloverHour != new.rolloverHour) {
             TydlLog.i(LogTag.SETTINGS, "rollover hour = ${new.rolloverHour}")
         }
@@ -454,7 +460,7 @@ private fun MainScreen(
     notificationsGranted: Boolean,
     deviceAdminGranted: Boolean,
     batteryExempt: Boolean,
-    onPause: (Int) -> Unit,
+    onPause: (Int, String) -> Unit,
     onResume: () -> Unit,
     onAllowOverlay: () -> Unit,
     onAllowNotifications: () -> Unit,
@@ -467,6 +473,12 @@ private fun MainScreen(
     val now = System.currentTimeMillis()
     val context = LocalContext.current
     val session = state.session
+
+    var pauseMinutesText by remember { mutableStateOf("") }
+    var pauseReason by remember { mutableStateOf("") }
+    val pauseMinutes = pauseMinutesText.toIntOrNull()
+    val pauseReasonAccepted = Reasons.typed(pauseReason)
+    val pauseValid = pauseMinutes != null && pauseMinutes in 1..180 && pauseReasonAccepted != null
 
     val title: String
     val detail: String
@@ -573,22 +585,46 @@ private fun MainScreen(
             }
         } else {
             Text(
-                text = "PAUSE",
+                text = "PAUSE (up to 180 min)",
                 style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 3.sp,
                 color = Mist,
             )
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(15, 30, 60).forEach { minutes ->
-                    OutlinedButton(
-                        onClick = { onPause(minutes) },
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("${minutes}m")
-                    }
-                }
+            OutlinedTextField(
+                value = pauseMinutesText,
+                onValueChange = { pauseMinutesText = it.filter(Char::isDigit).take(3) },
+                label = { Text("Minutes") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = pauseReason,
+                onValueChange = { pauseReason = it },
+                label = { Text("Reason (required)") },
+                supportingText = { Text("At least ${Reasons.MIN_WORDS} words.") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    val m = pauseMinutes ?: return@OutlinedButton
+                    val r = pauseReasonAccepted ?: return@OutlinedButton
+                    onPause(m, r)
+                    pauseMinutesText = ""
+                    pauseReason = ""
+                },
+                enabled = pauseValid,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Pause the guard")
             }
         }
 
@@ -681,7 +717,7 @@ private fun MainScreen(
 
 @Composable
 private fun SettingsScreen(
-    settings: ObsidianSettings,
+    settings: TydlSettings,
     dailyStats: DailyStats,
     dailyStatsStore: DailyStatsStore,
     onBack: () -> Unit,
@@ -689,7 +725,7 @@ private fun SettingsScreen(
     onPickTemplate: () -> Unit,
     onAddTile: () -> Unit,
     onViewLogs: () -> Unit,
-    onSettingsChange: (ObsidianSettings) -> Unit,
+    onSettingsChange: (TydlSettings) -> Unit,
 ) {
     var autoDeleteDays by remember { mutableStateOf(settings.dailyStatsAutoDeleteEveryNDays.toString()) }
     var deleteSaturday by remember { mutableStateOf(settings.dailyStatsAutoDeleteSaturday) }
@@ -736,7 +772,7 @@ private fun SettingsScreen(
 
         OutlinedTextField(
             value = settings.filenameFormat,
-            onValueChange = { onSettingsChange(settings.copy(filenameFormat = it.ifBlank { ObsidianSettings.DEFAULT_FILENAME_FORMAT })) },
+            onValueChange = { onSettingsChange(settings.copy(filenameFormat = it.ifBlank { TydlSettings.DEFAULT_FILENAME_FORMAT })) },
             label = { Text("Daily note filename format") },
             supportingText = { Text("Example: DD-MM-YYYY") },
             singleLine = true,

@@ -21,7 +21,7 @@ class DoneOutcomeTest {
 
     @Test
     fun `blank done note is rejected`() {
-        assertNull(DoneOutcome.note("   "))
-        assertEquals("went well", DoneOutcome.note("  went well  "))
+        assertNull(DoneOutcome.reflection("   "))
+        assertEquals("went well", DoneOutcome.reflection("  went well  "))
     }
 }

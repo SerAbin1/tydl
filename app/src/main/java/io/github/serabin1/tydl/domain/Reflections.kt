@@ -14,4 +14,8 @@ object Reflections {
     fun extension(minutes: Int, reason: String, sessionReason: String): String =
         "Extended ${minutes.coerceIn(Session.MIN_MINUTES, Session.MAX_MINUTES)} min for " +
             "\"${sessionReason.trim()}\": ${reason.trim()}"
+
+    /** Records a manual pause (up to 180 min) and its mandatory reason. */
+    fun pause(minutes: Int, reason: String): String =
+        "Pause (${minutes.coerceIn(1, 180)} min): ${reason.trim()}"
 }

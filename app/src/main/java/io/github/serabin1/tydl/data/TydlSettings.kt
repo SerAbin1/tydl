@@ -10,7 +10,7 @@ import io.github.serabin1.tydl.domain.obsidian.TaskGate
  * Behaviour toggles (away mode, gravitas, daily stats, sleep) default to on so existing users
  * keep the current experience unless they opt out.
  */
-data class ObsidianSettings(
+data class TydlSettings(
     val vaultUri: String? = null,
     val filenameFormat: String = DEFAULT_FILENAME_FORMAT,
     val templateUri: String? = null,
@@ -41,37 +41,37 @@ data class ObsidianSettings(
         const val DEFAULT_AUTO_DELETE_SATURDAY = false
         const val DEFAULT_AUTO_DELETE_SUNDAY = false
 
-        fun defaults() = ObsidianSettings()
+        fun defaults() = TydlSettings()
     }
 }
 
-/** Persists the Obsidian integration settings. The defaults live in [ObsidianSettings]. */
-class ObsidianSettingsStore(context: Context) {
+/** Persists the Obsidian integration settings. The defaults live in [TydlSettings]. */
+class TydlSettingsStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun load(): ObsidianSettings = ObsidianSettings(
+    fun load(): TydlSettings = TydlSettings(
         vaultUri = prefs.getString(KEY_VAULT_URI, null),
-        filenameFormat = prefs.getString(KEY_FILENAME_FORMAT, ObsidianSettings.DEFAULT_FILENAME_FORMAT)
-            ?: ObsidianSettings.DEFAULT_FILENAME_FORMAT,
+        filenameFormat = prefs.getString(KEY_FILENAME_FORMAT, TydlSettings.DEFAULT_FILENAME_FORMAT)
+            ?: TydlSettings.DEFAULT_FILENAME_FORMAT,
         templateUri = prefs.getString(KEY_TEMPLATE_URI, null),
-        rolloverHour = prefs.getInt(KEY_ROLLOVER_HOUR, ObsidianSettings.DEFAULT_ROLLOVER_HOUR),
-        taskGate = prefs.getString(KEY_TASK_GATE, ObsidianSettings.DEFAULT_TASK_GATE.name)
+        rolloverHour = prefs.getInt(KEY_ROLLOVER_HOUR, TydlSettings.DEFAULT_ROLLOVER_HOUR),
+        taskGate = prefs.getString(KEY_TASK_GATE, TydlSettings.DEFAULT_TASK_GATE.name)
             ?.let { runCatching { TaskGate.valueOf(it) }.getOrNull() }
-            ?: ObsidianSettings.DEFAULT_TASK_GATE,
-        awayModeEnabled = prefs.getBoolean(KEY_AWAY_MODE, ObsidianSettings.DEFAULT_AWAY_MODE),
+            ?: TydlSettings.DEFAULT_TASK_GATE,
+        awayModeEnabled = prefs.getBoolean(KEY_AWAY_MODE, TydlSettings.DEFAULT_AWAY_MODE),
         homeLatitude = prefs.getString(KEY_HOME_LAT, null)?.toDoubleOrNull(),
         homeLongitude = prefs.getString(KEY_HOME_LON, null)?.toDoubleOrNull(),
-        radiusMeters = prefs.getInt(KEY_RADIUS, ObsidianSettings.DEFAULT_RADIUS_METERS),
-        gravitasEnabled = prefs.getBoolean(KEY_GRAVITAS, ObsidianSettings.DEFAULT_GRAVITAS),
-        dailyStatsEnabled = prefs.getBoolean(KEY_DAILY_STATS, ObsidianSettings.DEFAULT_DAILY_STATS),
-        sleepTrackingEnabled = prefs.getBoolean(KEY_SLEEP, ObsidianSettings.DEFAULT_SLEEP),
-        dailyStatsAutoDeleteEveryNDays = prefs.getInt(KEY_AUTO_DELETE_N_DAYS, ObsidianSettings.DEFAULT_AUTO_DELETE_N_DAYS),
-        dailyStatsAutoDeleteSaturday = prefs.getBoolean(KEY_AUTO_DELETE_SATURDAY, ObsidianSettings.DEFAULT_AUTO_DELETE_SATURDAY),
-        dailyStatsAutoDeleteSunday = prefs.getBoolean(KEY_AUTO_DELETE_SUNDAY, ObsidianSettings.DEFAULT_AUTO_DELETE_SUNDAY),
+        radiusMeters = prefs.getInt(KEY_RADIUS, TydlSettings.DEFAULT_RADIUS_METERS),
+        gravitasEnabled = prefs.getBoolean(KEY_GRAVITAS, TydlSettings.DEFAULT_GRAVITAS),
+        dailyStatsEnabled = prefs.getBoolean(KEY_DAILY_STATS, TydlSettings.DEFAULT_DAILY_STATS),
+        sleepTrackingEnabled = prefs.getBoolean(KEY_SLEEP, TydlSettings.DEFAULT_SLEEP),
+        dailyStatsAutoDeleteEveryNDays = prefs.getInt(KEY_AUTO_DELETE_N_DAYS, TydlSettings.DEFAULT_AUTO_DELETE_N_DAYS),
+        dailyStatsAutoDeleteSaturday = prefs.getBoolean(KEY_AUTO_DELETE_SATURDAY, TydlSettings.DEFAULT_AUTO_DELETE_SATURDAY),
+        dailyStatsAutoDeleteSunday = prefs.getBoolean(KEY_AUTO_DELETE_SUNDAY, TydlSettings.DEFAULT_AUTO_DELETE_SUNDAY),
     )
 
-    fun save(settings: ObsidianSettings) {
+    fun save(settings: TydlSettings) {
         prefs.edit().apply {
             putString(KEY_VAULT_URI, settings.vaultUri)
             putString(KEY_FILENAME_FORMAT, settings.filenameFormat)

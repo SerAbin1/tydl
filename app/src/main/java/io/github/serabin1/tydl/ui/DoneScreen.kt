@@ -51,8 +51,8 @@ fun DoneScreen(
     showStartAnother: Boolean = true,
 ) {
     var askFinish by remember { mutableStateOf(task != null) }
-    var noteText by remember { mutableStateOf("") }
-    val note = DoneOutcome.note(noteText)
+    var reflectionText by remember { mutableStateOf("") }
+    val reflection = DoneOutcome.reflection(reflectionText)
 
     Column(
         modifier = Modifier
@@ -123,8 +123,8 @@ fun DoneScreen(
             Spacer(Modifier.height(40.dp))
         } else {
             OutlinedTextField(
-                value = noteText,
-                onValueChange = { noteText = it },
+                value = reflectionText,
+                onValueChange = { reflectionText = it },
                 label = { Text("How it went") },
                 supportingText = { Text("Required.") },
                 shape = RoundedCornerShape(14.dp),
@@ -134,8 +134,8 @@ fun DoneScreen(
             Spacer(Modifier.height(32.dp))
             if (showClose) {
                 Button(
-                    onClick = { note?.let(onDone) },
-                    enabled = note != null,
+                    onClick = { reflection?.let(onDone) },
+                    enabled = reflection != null,
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Tide, contentColor = Ink),
                     modifier = Modifier.fillMaxWidth().height(58.dp),
@@ -146,8 +146,8 @@ fun DoneScreen(
             }
             if (showStartAnother) {
                 OutlinedButton(
-                    onClick = { note?.let(onStartAnother) },
-                    enabled = note != null,
+                    onClick = { reflection?.let(onStartAnother) },
+                    enabled = reflection != null,
                     shape = RoundedCornerShape(18.dp),
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                 ) {

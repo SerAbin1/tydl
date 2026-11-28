@@ -29,7 +29,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.serabin1.tydl.data.GuardStore
 import io.github.serabin1.tydl.data.DailyStatsStore
-import io.github.serabin1.tydl.data.ObsidianSettingsStore
+import io.github.serabin1.tydl.data.TydlSettingsStore
 import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.DoneOutcome
 import io.github.serabin1.tydl.domain.Gravitas
@@ -339,7 +339,7 @@ class GuardService : Service() {
         handle(GuardEvent.Unlocked(at))
     }
 
-    private val settingsStore by lazy { ObsidianSettingsStore(this) }
+    private val settingsStore by lazy { TydlSettingsStore(this) }
 
     /** Feeds a screen/keyguard event into the sleep buffer when it could complete a gap. */
     private fun recordScreenEvent(state: SleepTracker.ScreenState) {
@@ -657,10 +657,10 @@ class GuardService : Service() {
     }
 
     /** Appends the how-it-went reflection to today's note, if the vault is configured. */
-    fun appendReflection(note: String) {
+    fun appendReflection(reflection: String) {
         scope.launch(Dispatchers.IO) {
             ensureRollover("reflection")
-            val done = noteWriteMutex.withLock { vault.appendReflection(note) }
+            val done = noteWriteMutex.withLock { vault.appendReflection(reflection) }
             TydlLog.i(LogTag.SESSION, "reflection saved=$done")
         }
     }
@@ -712,16 +712,16 @@ class GuardService : Service() {
                         quote = quote,
                         task = task,
                         onTaskFinished = { completeTask() },
-                        onDone = { note ->
+                        onDone = { reflection ->
                             endAndLock(this@GuardService)
-                            appendReflection(note)
+                            appendReflection(reflection)
                             overlay.remove()
                             expiryOverlay = null
                         },
-                        onStartAnother = { note ->
+                        onStartAnother = { reflection ->
                             end(this@GuardService)
                             simulateUnlock(this@GuardService)
-                            appendReflection(note)
+                            appendReflection(reflection)
                             overlay.remove()
                             expiryOverlay = null
                         },
@@ -753,10 +753,10 @@ class GuardService : Service() {
                         session = session,
                         task = state.selectedTask,
                         onTaskFinished = { completeTask() },
-                        onDone = { note ->
+                        onDone = { reflection ->
                             end(this@GuardService)
                             simulateUnlock(this@GuardService)
-                            appendReflection(note)
+                            appendReflection(reflection)
                             overlay.remove()
                             doneOverlay = null
                         },
@@ -1050,9 +1050,9 @@ class GuardService : Service() {
         fun completeTask(context: Context) = send(context, base(context).setAction(ACTION_COMPLETE_TASK))
 
         /** Appends the how-it-went reflection via the running service (mutex + rollover). */
-        fun appendReflection(context: Context, note: String) = send(
+        fun appendReflection(context: Context, reflection: String) = send(
             context,
-            base(context).setAction(ACTION_APPEND_REFLECTION).putExtra(EXTRA_REFLECTION, note),
+            base(context).setAction(ACTION_APPEND_REFLECTION).putExtra(EXTRA_REFLECTION, reflection),
         )
 
         private fun base(context: Context) = Intent(context, GuardService::class.java)

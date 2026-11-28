@@ -18,7 +18,7 @@ data class ObsidianTask(
  * The daily-note sections Tydl acts on. Anchors are `---` lines, never hardcoded contents, so
  * the note template can change without breaking the guard.
  */
-enum class ObsidianBlock { ROUTINE, CARRY_OVER, REFLECTION }
+enum class ObsidianSection { ROUTINE, BACKLOG, REFLECTION }
 
 /** How the intent screen picks suggested tasks. */
 enum class TaskGate { HARD, SOFT, MIXED }
@@ -87,23 +87,23 @@ object ObsidianNotes {
         val routineTasks = mutableListOf<ObsidianTask>()
         val carryOverTasks = mutableListOf<ObsidianTask>()
         val reflectionLines = mutableListOf<String>()
-        var section: ObsidianBlock = ObsidianBlock.ROUTINE
+        var section: ObsidianSection = ObsidianSection.ROUTINE
 
         content.lineSequence().forEach { raw ->
             val line = raw.trimEnd()
             if (line.trim() == "---") {
                 section = when (section) {
-                    ObsidianBlock.ROUTINE -> ObsidianBlock.CARRY_OVER
-                    ObsidianBlock.CARRY_OVER -> ObsidianBlock.REFLECTION
-                    else -> ObsidianBlock.REFLECTION
+                    ObsidianSection.ROUTINE -> ObsidianSection.BACKLOG
+                    ObsidianSection.BACKLOG -> ObsidianSection.REFLECTION
+                    else -> ObsidianSection.REFLECTION
                 }
                 return@forEach
             }
             val task = line.toTask()
             when (section) {
-                ObsidianBlock.ROUTINE -> task?.let { routineTasks.add(it) }
-                ObsidianBlock.CARRY_OVER -> task?.let { carryOverTasks.add(it) }
-                ObsidianBlock.REFLECTION -> if (task == null) reflectionLines.add(line)
+                ObsidianSection.ROUTINE -> task?.let { routineTasks.add(it) }
+                ObsidianSection.BACKLOG -> task?.let { carryOverTasks.add(it) }
+                ObsidianSection.REFLECTION -> if (task == null) reflectionLines.add(line)
             }
         }
 
