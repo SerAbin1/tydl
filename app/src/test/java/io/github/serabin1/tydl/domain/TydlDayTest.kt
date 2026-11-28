@@ -15,26 +15,26 @@ class TydlDayTest {
 
     @Test
     fun `date key is previous calendar day before rollover hour`() {
-        assertEquals("2026-11-26", TydlDay.key(at(3, 59), rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-26"), TydlDay.key(at(3, 59), rolloverHour = 4, zone = utc))
     }
 
     @Test
     fun `date key rolls over at the configured hour`() {
-        assertEquals("2026-11-27", TydlDay.key(at(4, 0), rolloverHour = 4, zone = utc))
-        assertEquals("2026-11-27", TydlDay.key(at(23, 30), rolloverHour = 4, zone = utc))
-        assertEquals("2026-11-26", TydlDay.key(at(0, 0), rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-27"), TydlDay.key(at(4, 0), rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-27"), TydlDay.key(at(23, 30), rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-26"), TydlDay.key(at(0, 0), rolloverHour = 4, zone = utc))
     }
 
     @Test
     fun `rollover hour zero keeps the calendar day`() {
-        assertEquals("2026-11-27", TydlDay.key(at(0, 0), rolloverHour = 0, zone = utc))
-        assertEquals("2026-11-27", TydlDay.key(at(23, 59), rolloverHour = 0, zone = utc))
+        assertEquals(DayKey.parse("2026-11-27"), TydlDay.key(at(0, 0), rolloverHour = 0, zone = utc))
+        assertEquals(DayKey.parse("2026-11-27"), TydlDay.key(at(23, 59), rolloverHour = 0, zone = utc))
     }
 
     @Test
     fun `yesterday key is the previous Tydl day`() {
-        assertEquals("2026-11-25", TydlDay.previousKey(at(3, 59), rolloverHour = 4, zone = utc))
-        assertEquals("2026-11-26", TydlDay.previousKey(at(4, 0), rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-25"), TydlDay.previousKey(at(3, 59), rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-26"), TydlDay.previousKey(at(4, 0), rolloverHour = 4, zone = utc))
     }
 
     @Test
@@ -42,8 +42,8 @@ class TydlDayTest {
         val wake = at(3, 30)
         val detectedLater = at(8, 30)
 
-        assertEquals("2026-11-26", TydlDay.key(wake, rolloverHour = 4, zone = utc))
-        assertEquals("2026-11-27", TydlDay.key(detectedLater, rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-26"), TydlDay.key(wake, rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-27"), TydlDay.key(detectedLater, rolloverHour = 4, zone = utc))
     }
 
     @Test
@@ -52,8 +52,8 @@ class TydlDayTest {
         val at0430Kolkata = LocalDateTime.of(2026, 11, 27, 4, 30)
             .atZone(kolkata).toInstant().toEpochMilli()
 
-        assertEquals("2026-11-27", TydlDay.key(at0430Kolkata, rolloverHour = 4, zone = kolkata))
-        assertEquals("2026-11-26", TydlDay.key(at0430Kolkata, rolloverHour = 4, zone = utc))
+        assertEquals(DayKey.parse("2026-11-27"), TydlDay.key(at0430Kolkata, rolloverHour = 4, zone = kolkata))
+        assertEquals(DayKey.parse("2026-11-26"), TydlDay.key(at0430Kolkata, rolloverHour = 4, zone = utc))
     }
 
     @Test
@@ -61,9 +61,9 @@ class TydlDayTest {
         val tydlToday = getTydlDay(at(3, 59), rolloverHour = 4, zone = utc)
 
         assertEquals(
-            listOf("2026-11-24"),
+            listOf(DayKey.parse("2026-11-24")),
             StatsRetention.datesToDelete(
-                dates = listOf("2026-11-24", "2026-11-25", "2026-11-26"),
+                dates = listOf("2026-11-24", "2026-11-25", "2026-11-26").map(DayKey::parse),
                 today = tydlToday,
                 everyNDays = 1,
                 deleteSaturday = false,

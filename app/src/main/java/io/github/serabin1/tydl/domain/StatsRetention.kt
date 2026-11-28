@@ -17,17 +17,17 @@ object StatsRetention {
 
     /** The stored date keys that should be removed, in input order. */
     fun datesToDelete(
-        dates: List<String>,
+        dates: List<DayKey>,
         today: LocalDate,
         everyNDays: Int,
         deleteSaturday: Boolean,
         deleteSunday: Boolean,
-    ): List<String> {
+    ): List<DayKey> {
         val weeklyWipe = (today.dayOfWeek == DayOfWeek.SATURDAY && deleteSaturday) ||
             (today.dayOfWeek == DayOfWeek.SUNDAY && deleteSunday)
 
-        return dates.filter { raw ->
-            val date = runCatching { LocalDate.parse(raw) }.getOrNull() ?: return@filter false
+        return dates.filter { key ->
+            val date = key.toLocalDate()
             when {
                 !date.isBefore(today) -> false
                 weeklyWipe -> true

@@ -8,9 +8,9 @@ class DailyStatsTest {
 
     @Test
     fun `fresh stats are empty`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
 
-        assertEquals("2026-11-25", stats.date)
+        assertEquals(DayKey.parse("2026-11-25"), stats.date)
         assertEquals(0, stats.tasksDone)
         assertEquals(0, stats.sessions)
         assertEquals(0, stats.totalMinutes)
@@ -23,7 +23,7 @@ class DailyStatsTest {
 
     @Test
     fun `withSessionStarted increments sessions and total minutes`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
             .withSessionStarted(5)
             .withSessionStarted(10)
 
@@ -33,7 +33,7 @@ class DailyStatsTest {
 
     @Test
     fun `withExtensionAdded increments extensions`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
             .withExtensionAdded(5)
             .withExtensionAdded(10)
 
@@ -43,7 +43,7 @@ class DailyStatsTest {
 
     @Test
     fun `withTaskDone increments tasks done`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
             .withTaskDone()
             .withTaskDone()
             .withTaskDone()
@@ -53,7 +53,7 @@ class DailyStatsTest {
 
     @Test
     fun `withUnlock increments unlocks`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
             .withUnlock()
             .withUnlock()
 
@@ -62,7 +62,7 @@ class DailyStatsTest {
 
     @Test
     fun `withSleep sets sleep start and wake time`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
             .withSleep(sleepStart = 1_000_000L, wakeTime = 1_000_000L + 8 * Session.MINUTE_MS * 60)
 
         assertEquals(1_000_000L, stats.sleepStart)
@@ -71,12 +71,12 @@ class DailyStatsTest {
 
     @Test
     fun `withSleepCleared removes sleep`() {
-        val stats = DailyStats.forDate("2026-11-25")
+        val stats = DailyStats.forDate(DayKey.parse("2026-11-25"))
             .withSleep(sleepStart = 1_000_000L, wakeTime = 2_000_000L)
             .withSleepCleared()
 
         assertNull(stats.sleepStart)
         assertNull(stats.wakeTime)
-        assertEquals("2026-11-25", stats.date) // date unchanged
+        assertEquals(DayKey.parse("2026-11-25"), stats.date) // date unchanged
     }
 }

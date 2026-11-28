@@ -4,10 +4,11 @@ package io.github.serabin1.tydl.domain
  * One day's worth of Tydl usage stats. Updated on events (session start, extension, task done,
  * unlock, sleep computed) — never parsed from Obsidian notes — so it survives deleted weekly notes.
  *
- * [date] is a `yyyy-MM-DD` string so it can be a SharedPreferences key.
+ * [date] is an ISO day key so it can be a SharedPreferences key without being confused with a
+ * filename-formatted date.
  */
 data class DailyStats(
-    val date: String,
+    val date: DayKey,
     val tasksDone: Int = 0,
     val sessions: Int = 0,
     val totalMinutes: Int = 0,
@@ -42,6 +43,6 @@ data class DailyStats(
     )
 
     companion object {
-        fun forDate(date: String): DailyStats = DailyStats(date = date)
+        fun forDate(date: DayKey): DailyStats = DailyStats(date = date)
     }
 }

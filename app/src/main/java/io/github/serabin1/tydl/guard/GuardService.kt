@@ -33,6 +33,7 @@ import io.github.serabin1.tydl.data.TydlSettingsStore
 import io.github.serabin1.tydl.data.ObsidianVault
 import io.github.serabin1.tydl.domain.DoneOutcome
 import io.github.serabin1.tydl.domain.PickedTask
+import io.github.serabin1.tydl.domain.DayKey
 import io.github.serabin1.tydl.domain.Gravitas
 import io.github.serabin1.tydl.domain.GuardEffect
 import io.github.serabin1.tydl.domain.GuardEngine
@@ -539,7 +540,7 @@ class GuardService : Service() {
             val sleepStats = if (todayStats.sleepStart != null) todayStats else {
                 val rolloverHour = settings.rolloverHour
                 val prevDate = TydlDay.of(now(), rolloverHour).minusDays(1)
-                dailyStatsStore.load(prevDate.toString())
+                dailyStatsStore.load(DayKey.of(prevDate))
             }
             sleepStats.sleepStart?.let { start ->
                 val wake = sleepStats.wakeTime ?: start

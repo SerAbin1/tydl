@@ -28,12 +28,12 @@ object TydlDay {
         of(Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime(), rolloverHour)
 
     /** ISO `yyyy-MM-dd` key for the Tydl day containing [at], suitable for a store key. */
-    fun key(at: Long, rolloverHour: Int, zone: ZoneId = ZoneId.systemDefault()): String =
-        of(at, rolloverHour, zone).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    fun key(at: Long, rolloverHour: Int, zone: ZoneId = ZoneId.systemDefault()): DayKey =
+        DayKey.of(of(at, rolloverHour, zone))
 
     /** ISO key for the Tydl day immediately before the one containing [at]. */
-    fun previousKey(at: Long, rolloverHour: Int, zone: ZoneId = ZoneId.systemDefault()): String =
-        of(at, rolloverHour, zone).minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    fun previousKey(at: Long, rolloverHour: Int, zone: ZoneId = ZoneId.systemDefault()): DayKey =
+        DayKey.of(of(at, rolloverHour, zone).minusDays(1))
 }
 
 /**

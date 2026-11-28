@@ -2,6 +2,7 @@ package io.github.serabin1.tydl.data
 
 import android.content.Context
 import io.github.serabin1.tydl.domain.DailyStats
+import io.github.serabin1.tydl.domain.DayKey
 import io.github.serabin1.tydl.domain.TydlDay
 
 /**
@@ -56,10 +57,9 @@ class DailyStatsStore(
     }
 
     /** Loads the stats for [date]. */
-    fun load(date: String): DailyStats {
+    fun load(date: DayKey): DailyStats {
         val raw = prefs.getString(keyFor(date), null)
-        val decoded = decode(raw)
-        return decoded?.copy(date = date) ?: DailyStats.forDate(date)
+        return decode(raw, date) ?: DailyStats.forDate(date)
     }
 
     /** Saves [stats] for its [date]. */
@@ -68,7 +68,7 @@ class DailyStatsStore(
     }
 
     /** Clears all stats, or just one [date] when provided. */
-    fun clear(date: String? = null) {
+    fun clear(date: DayKey? = null) {
         val editor = prefs.edit()
         if (date == null) {
             editor.clear()
@@ -79,7 +79,7 @@ class DailyStatsStore(
     }
 
     /** Removes the given [dates] in one commit, used by the auto-delete policy. */
-    fun clearDates(dates: List<String>) {
+    fun clearDates(dates: List<DayKey>) {
         if (dates.isEmpty()) return
         val editor = prefs.edit()
         dates.forEach { editor.remove(keyFor(it)) }
@@ -87,14 +87,14 @@ class DailyStatsStore(
     }
 
     /** Returns every date that has stats stored. */
-    fun dates(): List<String> {
+    fun dates(): List<DayKey> {
         return prefs.all.keys
             .filter { it.startsWith(PREFIX) }
-            .map { it.removePrefix(PREFIX) }
+            .mapNotNull { runCatching { DayKey.parse(it.removePrefix(PREFIX)) }.getOrNull() }
             .sorted()
     }
 
-    private fun keyFor(date: String) = "$PREFIX$date"
+    private fun keyFor(date: DayKey) = "$PREFIX${date.value}"
 
     private fun encode(stats: DailyStats): String {
         return listOf(
@@ -109,12 +109,12 @@ class DailyStatsStore(
         ).joinToString("|")
     }
 
-    private fun decode(raw: String?): DailyStats? {
+    private fun decode(raw: String?, date: DayKey): DailyStats? {
         if (raw.isNullOrBlank()) return null
         val parts = raw.split("|")
         return try {
             DailyStats(
-                date = "", // filled by caller from the key
+                date = date,
                 tasksDone = parts[0].toInt(),
                 sessions = parts[1].toInt(),
                 totalMinutes = parts[2].toInt(),
@@ -129,7 +129,7 @@ class DailyStatsStore(
         }
     }
 
-    private fun dateKey(at: Long): String = TydlDay.key(at, rolloverHour())
+    private fun dateKey(at: Long): DayKey = TydlDay.key(at, rolloverHour())
 
     private companion object {
         const val PREFS = "tydl_daily_stats"
