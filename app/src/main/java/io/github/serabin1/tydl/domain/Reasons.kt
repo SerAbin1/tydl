@@ -10,9 +10,9 @@ object Reasons {
 
     private val SPACES = Regex("\\s+")
 
-    fun typed(text: String): String? = text.trim().takeIf { words(it) >= MIN_WORDS }
+    fun typed(text: String): String? = normalize(text).takeIf { words(it) >= MIN_WORDS }
 
-    fun picked(text: String): String? = text.trim().ifBlank { null }
+    fun picked(text: String): String? = normalize(text).ifBlank { null }
 
     /**
      * Only a reason typed from "Something else" may become a new backlog task. A task picked in
@@ -23,5 +23,7 @@ object Reasons {
     fun accepted(text: String, preFilled: Boolean): String? =
         typed(text) ?: if (preFilled) picked(text) else null
 
-    fun words(text: String): Int = text.trim().split(SPACES).count { it.isNotEmpty() }
+    fun words(text: String): Int = normalize(text).split(SPACES).count { it.isNotEmpty() }
+
+    private fun normalize(text: String): String = text.trim().replace(SPACES, " ")
 }

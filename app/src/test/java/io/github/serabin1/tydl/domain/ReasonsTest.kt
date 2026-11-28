@@ -12,6 +12,11 @@ class ReasonsTest {
     }
 
     @Test
+    fun `a typed reason collapses internal whitespace`() {
+        assertEquals("Buy milk today please", Reasons.typed("Buy   milk   today  please"))
+    }
+
+    @Test
     fun `a typed reason rejects blank and short text`() {
         assertNull(Reasons.typed(""))
         assertNull(Reasons.typed("   "))
