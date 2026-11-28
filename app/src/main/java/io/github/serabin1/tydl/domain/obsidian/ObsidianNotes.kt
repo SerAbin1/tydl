@@ -294,20 +294,84 @@ object ObsidianNotes {
 
     /**
      * Set the reflection. The first reflection of the day replaces the lone `- ` placeholder;
-     * later ones append below, above the closing quote.
+     * later ones append below, above the closing quote. Existing lines are kept verbatim so a
+     * nested session block (extensions, done text) is never flattened.
      */
-    fun withReflection(content: String, text: String): String {
+    fun withReflection(content: String, text: String): String =
+        withReflectionBullets(content, listOf("- ${text.trim()}"))
+
+    /**
+     * Appends a session start header `- HH:MM → reason` to today's REFLECTION slot.
+     */
+    fun withSessionStarted(content: String, header: String): String =
+        withReflectionBullets(content, listOf(header))
+
+    /**
+     * Nests an extension bullet `\t- Nm → note` under its session header, right after any
+     * earlier extensions for that same session. When the header isn't in today's note (session
+     * crossed a day boundary), the bullet is appended as a standalone line.
+     */
+    fun withExtension(content: String, header: String, bullet: String): String {
         val lines = content.split("\n").toMutableList()
+        val bounds = reflectionBounds(lines) ?: return content
+        val start = bounds[0]
+        val end = bounds[1]
+        val region = lines.subList(start, end)
+        val headerIdx = region.indexOfFirst { it.trim() == header }
+        if (headerIdx < 0) return withReflectionBullets(content, listOf(bullet))
+        val absHeader = start + headerIdx
+        // Insert after the header and any nested bullets already belonging to this session.
+        var insertAt = absHeader + 1
+        while (insertAt < end && (lines[insertAt].startsWith(" ") || lines[insertAt].startsWith("\t"))) {
+            insertAt++
+        }
+        lines.add(insertAt, bullet)
+        return lines.joinToString("\n")
+    }
+
+    /**
+     * Rewrites a session's start header in place to `- HH:MM to HH:MM → reason` and nests the
+     * done text `\t- ...` beneath it (after any extensions). When the header isn't in today's
+     * note, a standalone completed block is appended.
+     */
+    fun withSessionDone(content: String, startedHeader: String, endedHeader: String, doneBullet: String): String {
+        val lines = content.split("\n").toMutableList()
+        val bounds = reflectionBounds(lines) ?: return content
+        val start = bounds[0]
+        val end = bounds[1]
+        val region = lines.subList(start, end)
+        val headerIdx = region.indexOfFirst { it.trim() == startedHeader }
+        if (headerIdx < 0) return withReflectionBullets(content, listOf(endedHeader, doneBullet))
+        val absHeader = start + headerIdx
+        lines[absHeader] = endedHeader
+        var insertAt = absHeader + 1
+        while (insertAt < end && (lines[insertAt].startsWith(" ") || lines[insertAt].startsWith("\t"))) {
+            insertAt++
+        }
+        lines.add(insertAt, doneBullet)
+        return lines.joinToString("\n")
+    }
+
+    /** Bounds of today's REFLECTION region: [first line after the second `---`, line of the closing `>` quote). */
+    private fun reflectionBounds(lines: List<String>): IntArray? {
         val second = separatorIndex(lines, 2)
-        if (second < 0) return content
+        if (second < 0) return null
         val quoteIdx = (second + 1 until lines.size).firstOrNull { lines[it].trim().startsWith(">") }
         val end = quoteIdx ?: lines.size
-        val region = lines.subList(second + 1, end).toMutableList()
-        val existing = region.map { it.trim() }
-            .filter { it.isNotEmpty() && it != "-" && !it.startsWith(">") }
-        val newBullet = "- ${text.trim()}"
-        val bullets = if (existing.isEmpty()) listOf(newBullet) else existing + newBullet
-        return (lines.subList(0, second + 1) + bullets + lines.subList(end, lines.size))
+        return intArrayOf(second + 1, end)
+    }
+
+    /** Rebuilds the reflection region from its raw lines (indentation preserved), dropping the
+     * lone `-` placeholder and blank lines, then appending [newBullets]. */
+    private fun withReflectionBullets(content: String, newBullets: List<String>): String {
+        val lines = content.split("\n").toMutableList()
+        val bounds = reflectionBounds(lines) ?: return content
+        val start = bounds[0]
+        val end = bounds[1]
+        val existing = lines.subList(start, end)
+            .filter { it.trim().isNotEmpty() && it.trim() != "-" }
+        val updated = existing + newBullets
+        return (lines.subList(0, start) + updated + lines.subList(end, lines.size))
             .joinToString("\n")
     }
 

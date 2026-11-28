@@ -142,6 +142,27 @@ class ObsidianVault(private val context: Context) : DailyNoteVault {
         return writeToday(ObsidianNotes.withReflection(content, note))
     }
 
+    /** Appends the session start header `- HH:MM → reason` to today's REFLECTION slot. */
+    fun appendSessionStarted(header: String): Boolean {
+        if (!isConfigured()) return false
+        val content = readToday() ?: return false
+        return writeToday(ObsidianNotes.withSessionStarted(content, header))
+    }
+
+    /** Nests an extension bullet under its session header in today's REFLECTION slot. */
+    fun appendExtension(header: String, bullet: String): Boolean {
+        if (!isConfigured()) return false
+        val content = readToday() ?: return false
+        return writeToday(ObsidianNotes.withExtension(content, header, bullet))
+    }
+
+    /** Rewrites a session's start header to its start→end total and nests the done text beneath it. */
+    fun appendSessionDone(startedHeader: String, endedHeader: String, doneBullet: String): Boolean {
+        if (!isConfigured()) return false
+        val content = readToday() ?: return false
+        return writeToday(ObsidianNotes.withSessionDone(content, startedHeader, endedHeader, doneBullet))
+    }
+
     fun todayFileName(now: LocalDateTime = LocalDateTime.now()): String {
         val current = settings
         return ObsidianNotes.dailyNoteName(

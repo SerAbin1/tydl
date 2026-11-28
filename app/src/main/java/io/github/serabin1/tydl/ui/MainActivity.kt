@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity() {
                                 session = session,
                                 task = guardState.selectedTask?.raw,
                                 onStartAnother = { reflection ->
-                                    GuardService.appendReflection(this, reflection)
+                                    GuardService.appendSessionDone(this, reflection)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     earlyEnd = false
@@ -206,7 +206,7 @@ class MainActivity : ComponentActivity() {
                                     GuardService.completeTask(this)
                                 },
                                 onDone = { reflection ->
-                                    GuardService.appendReflection(this, reflection)
+                                    GuardService.appendSessionDone(this, reflection)
                                     GuardService.endAndLock(this)
                                     earlyEnd = false
                                     refresh()
@@ -243,7 +243,7 @@ class MainActivity : ComponentActivity() {
                                     GuardService.completeTask(this)
                                 },
                                 onDone = { reflection ->
-                                    GuardService.appendReflection(this, reflection)
+                                    GuardService.appendSessionDone(this, reflection)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null
@@ -262,13 +262,13 @@ class MainActivity : ComponentActivity() {
                                     GuardService.completeTask(this)
                                 },
                                 onDone = { reflection ->
-                                    GuardService.appendReflection(this, reflection)
+                                    GuardService.appendSessionDone(this, reflection)
                                     GuardService.endAndLock(this)
                                     fallback = null
                                     refresh()
                                 },
                                 onStartAnother = { reflection ->
-                                    GuardService.appendReflection(this, reflection)
+                                    GuardService.appendSessionDone(this, reflection)
                                     GuardService.end(this)
                                     GuardService.simulateUnlock(this)
                                     fallback = null

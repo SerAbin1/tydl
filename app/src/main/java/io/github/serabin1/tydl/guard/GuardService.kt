@@ -271,9 +271,9 @@ class GuardService : Service() {
                         task = taskText?.let { PickedTask(raw = it, display = taskDisplay ?: it) },
                     ),
                 )
-                // The session reason is written up front: matching it later to the nth checked
+                // The session header is written up front: matching it later to the nth checked
                 // task breaks when sessions overlap or tasks are checked off in another order.
-                state.session?.reason?.let { appendReflection(Reflections.session(it)) }
+                state.session?.let { appendSessionStarted(it.startedAt, it.reason) }
                 // A reason marked in R&T becomes a backlog task in today's note. The note write
                 // is off the main thread and never blocks or cancels the session. It shares the
                 // reflection write's lock so the two read-modify-writes cannot clobber each other.
@@ -304,6 +304,7 @@ class GuardService : Service() {
             }
             ACTION_COMPLETE_TASK -> completeTask()
             ACTION_APPEND_REFLECTION -> appendReflection(command.getStringExtra(EXTRA_REFLECTION).orEmpty())
+            ACTION_APPEND_SESSION_DONE -> appendSessionDone(command.getStringExtra(EXTRA_REFLECTION).orEmpty())
         }
         return START_STICKY
     }
@@ -674,6 +675,47 @@ class GuardService : Service() {
         }
     }
 
+    /** Appends the session start header `- HH:MM → reason` to today's note. */
+    private fun appendSessionStarted(startedAt: Long, reason: String) {
+        scope.launch(Dispatchers.IO) {
+            ensureRollover("session start")
+            val header = Reflections.session(startedAt, reason)
+            val done = noteWriteMutex.withLock { vault.appendSessionStarted(header) }
+            TydlLog.i(LogTag.REFLECTION, "session started=$done")
+        }
+    }
+
+    /** Appends an extension note `\t- Nm → note` nested under its session header. */
+    private fun appendExtension(startedAt: Long, sessionReason: String, minutes: Int, extensionNote: String) {
+        scope.launch(Dispatchers.IO) {
+            ensureRollover("extension")
+            val header = Reflections.session(startedAt, sessionReason)
+            val bullet = Reflections.extension(minutes, extensionNote)
+            val done = noteWriteMutex.withLock { vault.appendExtension(header, bullet) }
+            TydlLog.i(LogTag.REFLECTION, "extension saved=$done")
+        }
+    }
+
+    /**
+     * Appends the end-of-session reflection. Snapshots the live (or completed) session synchronously
+     * so the start→end total and done text survive the `end`/`endAndLock` that follows. The header
+     * is rewritten in place to `- HH:MM to HH:MM → reason` and the done text is nested beneath it.
+     */
+    private fun appendSessionDone(reflection: String) {
+        val session = state.session ?: state.completedSession ?: return
+        val endedAt = now()
+        scope.launch(Dispatchers.IO) {
+            ensureRollover("session done")
+            val startedHeader = Reflections.session(session.startedAt, session.reason)
+            val endedHeader = Reflections.sessionTime(session.startedAt, endedAt, session.reason)
+            val doneBullet = "\t- ${reflection.trim()}"
+            val done = noteWriteMutex.withLock {
+                vault.appendSessionDone(startedHeader, endedHeader, doneBullet)
+            }
+            TydlLog.i(LogTag.REFLECTION, "session done=$done")
+        }
+    }
+
     /**
      * Extends a live session and, when the engine accepted it, appends the extension's reason to
      * today's REFLECTION slot, naming the starting reason so the bullet stands on its own.
@@ -686,7 +728,7 @@ class GuardService : Service() {
             before != null &&
             state.session!!.extensionsUsed == before.extensionsUsed + 1
         if (applied) {
-            appendReflection(Reflections.extension(safeMinutes, reason, before.reason))
+            appendExtension(before.startedAt, before.reason, safeMinutes, reason)
             if (settingsStore.load().dailyStatsEnabled) dailyStatsStore.recordExtension(safeMinutes)
         }
     }
@@ -722,15 +764,15 @@ class GuardService : Service() {
                         task = task,
                         onTaskFinished = { completeTask() },
                         onDone = { reflection ->
+                            appendSessionDone(reflection)
                             endAndLock(this@GuardService)
-                            appendReflection(reflection)
                             overlay.remove()
                             expiryOverlay = null
                         },
                         onStartAnother = { reflection ->
+                            appendSessionDone(reflection)
                             end(this@GuardService)
                             simulateUnlock(this@GuardService)
-                            appendReflection(reflection)
                             overlay.remove()
                             expiryOverlay = null
                         },
@@ -763,9 +805,9 @@ class GuardService : Service() {
                         task = state.selectedTask?.raw,
                         onTaskFinished = { completeTask() },
                         onDone = { reflection ->
+                            appendSessionDone(reflection)
                             end(this@GuardService)
                             simulateUnlock(this@GuardService)
-                            appendReflection(reflection)
                             overlay.remove()
                             doneOverlay = null
                         },
@@ -958,6 +1000,7 @@ class GuardService : Service() {
         private const val ACTION_UNLOCK = "io.github.serabin1.tydl.action.UNLOCK"
         private const val ACTION_COMPLETE_TASK = "io.github.serabin1.tydl.action.COMPLETE_TASK"
         private const val ACTION_APPEND_REFLECTION = "io.github.serabin1.tydl.action.APPEND_REFLECTION"
+        private const val ACTION_APPEND_SESSION_DONE = "io.github.serabin1.tydl.action.APPEND_SESSION_DONE"
         private const val EXTRA_REFLECTION = "reflection"
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_MINUTES = "minutes"
@@ -1068,6 +1111,12 @@ class GuardService : Service() {
         fun appendReflection(context: Context, reflection: String) = send(
             context,
             base(context).setAction(ACTION_APPEND_REFLECTION).putExtra(EXTRA_REFLECTION, reflection),
+        )
+
+        /** Appends the end-of-session reflection (start→end total + done text) via the running service. */
+        fun appendSessionDone(context: Context, reflection: String) = send(
+            context,
+            base(context).setAction(ACTION_APPEND_SESSION_DONE).putExtra(EXTRA_REFLECTION, reflection),
         )
 
         private fun base(context: Context) = Intent(context, GuardService::class.java)

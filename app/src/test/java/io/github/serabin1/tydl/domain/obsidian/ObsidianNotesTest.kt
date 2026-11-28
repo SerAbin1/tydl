@@ -811,4 +811,88 @@ class ObsidianNotesTest {
         """.trimIndent()
         assertNull(ObsidianNotes.planRollover(today, previous))
     }
+
+    private fun sessionNote(startedHeader: String = "- 00:16 → finish the design doc"): String =
+        "Today, 22-11-2026\n\n- [ ] Write the design doc\n\n---\n\n- [ ] Buy groceries\n\n---\n\n" +
+            "$startedHeader\n\t- 45m → Implementation underway.\n> [!quote] Consistency Before Greatness"
+
+    @Test
+    fun `session start header is appended to an empty reflection slot`() {
+        val updated = ObsidianNotes.withSessionStarted(noteContent, "- 00:16 → finish the design doc")
+
+        assertTrue(updated.contains("- 00:16 → finish the design doc"))
+        assertTrue(updated.contains("> [!quote] Consistency Before Greatness"))
+        assertTrue(!updated.contains("\n-\n") && !updated.contains("- \n"))
+    }
+
+    @Test
+    fun `extension nests under its own session even when a sibling session follows`() {
+        val content = "Today, 22-11-2026\n\n---\n\n---\n\n" +
+            "- 00:16 → finish the design doc\n\t- 45m → design note\n" +
+            "- 00:30 → clear the inbox\n> [!quote] Consistency Before Greatness"
+        val updated = ObsidianNotes.withExtension(content, "- 00:16 → finish the design doc",
+            "\t- 13m → more design note")
+
+        val designIdx = updated.indexOf("- 00:16 → finish the design doc")
+        val moreIdx = updated.indexOf("\t- 13m → more design note")
+        val inboxIdx = updated.indexOf("- 00:30 → clear the inbox")
+        assertTrue(designIdx < moreIdx && moreIdx < inboxIdx)
+        assertTrue(updated.contains("\t- 45m → design note"))
+        assertTrue(updated.contains("\t- 13m → more design note"))
+    }
+
+    @Test
+    fun `extension stacks after earlier extensions for the same session`() {
+        val updated = ObsidianNotes.withExtension(sessionNote(), "- 00:16 → finish the design doc",
+            "\t- 13m → Some more refactors done")
+
+        val headerIdx = updated.indexOf("- 00:16 → finish the design doc")
+        val firstIdx = updated.indexOf("\t- 45m → Implementation underway.")
+        val secondIdx = updated.indexOf("\t- 13m → Some more refactors done")
+        assertTrue(headerIdx < firstIdx && firstIdx < secondIdx)
+        assertTrue(updated.indexOf("> [!quote]") > secondIdx)
+    }
+
+    @Test
+    fun `extension without a matching session header is appended as a standalone bullet`() {
+        val updated = ObsidianNotes.withExtension(sessionNote(), "- 00:99 → nowhere", "\t- 5m → orphan")
+
+        assertTrue(updated.contains("\t- 5m → orphan"))
+        assertTrue(updated.indexOf("\t- 5m → orphan") > updated.indexOf("- 00:16 → finish the design doc"))
+    }
+
+    @Test
+    fun `session done rewrites the header to start-to-end and nests the done text`() {
+        val ended = "- 00:16 to 00:40 → finish the design doc"
+        val done = "\t- Took much longer but I'm the better for it, I think."
+        val updated = ObsidianNotes.withSessionDone(sessionNote(), "- 00:16 → finish the design doc", ended, done)
+
+        assertTrue(updated.contains(ended))
+        assertTrue(!updated.contains("- 00:16 → finish the design doc"))
+        val doneIdx = updated.indexOf(done)
+        assertTrue(doneIdx > updated.indexOf(ended))
+        assertTrue(updated.indexOf("\t- 45m → Implementation underway.") < doneIdx)
+        assertTrue(updated.indexOf("> [!quote]") > doneIdx)
+    }
+
+    @Test
+    fun `session done without a matching header appends a standalone completed block`() {
+        val ended = "- 00:16 to 00:40 → finish the design doc"
+        val done = "\t- Took much longer but I'm the better for it, I think."
+        val updated = ObsidianNotes.withSessionDone(sessionNote(), "- 00:99 → nowhere", ended, done)
+
+        assertTrue(updated.contains(ended))
+        assertTrue(updated.contains(done))
+        assertTrue(updated.indexOf(done) > updated.indexOf(ended))
+    }
+
+    @Test
+    fun `withReflection preserves nested session extensions instead of flattening them`() {
+        val updated = ObsidianNotes.withReflection(sessionNote(), "Pause (10 min): stretch")
+
+        assertTrue(updated.contains("- 00:16 → finish the design doc"))
+        assertTrue(updated.contains("\t- 45m → Implementation underway."))
+        assertTrue(updated.contains("- Pause (10 min): stretch"))
+        assertTrue(updated.indexOf("\t- 45m") < updated.indexOf("- Pause"))
+    }
 }
